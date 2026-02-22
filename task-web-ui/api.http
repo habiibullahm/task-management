@@ -1,0 +1,160 @@
+### Task Management API - Local Testing
+### Base URL: http://localhost:3001/api/v1
+###
+### This file uses REST Client extension for VS Code
+### Install: https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+###
+### Or use with IntelliJ IDEA HTTP Client
+###
+### HOW TO USE:
+### 1. First, run the "Register New User" request to create an account
+### 2. Then, run the "Login User" request (marked with @name login)
+### 3. All subsequent requests will AUTOMATICALLY use the tokens from the login response
+### 4. No need to manually copy/paste tokens!
+###
+### The automatic token extraction uses this syntax:
+### {{login.response.body.data.tokens.accessToken}} - Gets access token from login response
+### {{login.response.body.data.tokens.refreshToken}} - Gets refresh token from login response
+
+@baseUrl = http://localhost:3001/api/v1
+
+###############################################
+# Health Check
+###############################################
+
+### Health Check
+GET {{baseUrl}}/health HTTP/1.1
+
+###############################################
+# Authentication
+###############################################
+
+### 1. Register New User
+POST {{baseUrl}}/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "SecurePass123!@#",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+
+### 2. Register Another User (for testing)
+POST {{baseUrl}}/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "jane.smith@example.com",
+  "password": "SecurePass123!@#",
+  "firstName": "Jane",
+  "lastName": "Smith"
+}
+
+### 3. Login User
+# @name login
+POST {{baseUrl}}/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "SecurePass123!@#"
+}
+
+###
+
+### 4. Get User Profile (Protected Route)
+# Automatically uses token from login response above
+GET {{baseUrl}}/auth/profile HTTP/1.1
+Authorization: Bearer {{login.response.body.data.tokens.accessToken}}
+
+### 5. Refresh Access Token
+# Automatically uses refresh token from login response above
+POST {{baseUrl}}/auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.data.tokens.refreshToken}}"
+}
+
+### 6. Logout
+# Automatically uses token from login response above
+POST {{baseUrl}}/auth/logout HTTP/1.1
+Authorization: Bearer {{login.response.body.data.tokens.accessToken}}
+
+###############################################
+# Error Testing
+###############################################
+
+### Test - Register with Weak Password
+POST {{baseUrl}}/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "weak",
+  "firstName": "Test",
+  "lastName": "User"
+}
+
+### Test - Register with Duplicate Email
+POST {{baseUrl}}/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "SecurePass123!@#",
+  "firstName": "Duplicate",
+  "lastName": "User"
+}
+
+### Test - Login with Wrong Password
+POST {{baseUrl}}/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "WrongPassword123!@#"
+}
+
+### Test - Login with Non-existent Email
+POST {{baseUrl}}/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "nonexistent@example.com",
+  "password": "SecurePass123!@#"
+}
+
+### Test - Access Protected Route Without Token
+GET {{baseUrl}}/auth/profile HTTP/1.1
+
+### Test - Access Protected Route With Invalid Token
+GET {{baseUrl}}/auth/profile HTTP/1.1
+Authorization: Bearer invalid_token_here
+
+### Test - Refresh with Invalid Token
+POST {{baseUrl}}/auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid_refresh_token"
+}
+
+###############################################
+# Manual Token Testing
+# (Replace with actual tokens from login response)
+###############################################
+
+### Manual - Get Profile with Custom Token
+GET {{baseUrl}}/auth/profile HTTP/1.1
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Manual - Refresh with Custom Token
+POST {{baseUrl}}/auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
+}
+
