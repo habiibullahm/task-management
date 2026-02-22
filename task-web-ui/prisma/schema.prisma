@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and user management
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole @default(MEMBER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  createdTasks     Task[]           @relation("TaskCreator")
+  assignedTasks    Task[]           @relation("TaskAssignee")
+  teamMemberships  TeamMember[]
+  createdTeams     Team[]           @relation("TeamCreator")
+  comments         Comment[]
+  activityLogs     ActivityLog[]
+
+  @@map("users")
+}
+
+// Team model for organizing users into groups
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+
+  // Relations
+  members   TeamMember[]
+  tasks     Task[]
+  creator   User         @relation("TeamCreator", fields: [createdById], references: [id])
+
+  @@map("teams")
+}
+
+// TeamMember model for managing team membership
+model TeamMember {
+  id        String         @id @default(uuid())
+  teamId    String
+  userId    String
+  role      TeamMemberRole @default(MEMBER)
+  joinedAt  DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+// Task model for managing tasks
+model Task {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdById String
+  assignedToId String?
+  teamId      String?
+
+  // Relations
+  createdBy    User          @relation("TaskCreator", fields: [createdById], references: [id])
+  assignedTo   User?         @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  @@map("tasks")
+}
+
+// Comment model for task discussions
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+// ActivityLog model for tracking changes
+model ActivityLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String
+  changes   String?  // JSON string of changes
+  taskId    String?
+  userId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+enum TeamMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
