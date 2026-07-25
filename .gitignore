@@ -1,0 +1,67 @@
+# ============================================
+# ROOT .gitignore for Task Management Monorepo
+# ============================================
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE and Editor Files
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment Variables (Global)
+.env
+.env.local
+.env.*.local
+
+# Logs (Global)
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+
+# Build Artifacts (Global)
+dist/
+build/
+*.tsbuildinfo
+
+# Coverage Reports
+coverage/
+.nyc_output/
+
+# Package Manager
+node_modules/
+
+# Docker
+docker-compose.override.yml
+
+# Backup Files
+*.bak
+*.backup
+*.old
+
