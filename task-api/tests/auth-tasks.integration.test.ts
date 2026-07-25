@@ -80,6 +80,39 @@ describe('API + DB integration', () => {
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
     });
+
+    it('rejects duplicate email registration', async () => {
+      const email = `dup_${Date.now()}@example.com`;
+      await request(app).post(`${API}/auth/register`).send({
+        email,
+        password,
+        firstName: 'One',
+        lastName: 'User',
+      });
+
+      const res = await request(app).post(`${API}/auth/register`).send({
+        email,
+        password,
+        firstName: 'Two',
+        lastName: 'User',
+      });
+
+      expect(res.status).toBe(409);
+      expect(res.body.success).toBe(false);
+      expect(await prisma.user.count({ where: { email } })).toBe(1);
+    });
+
+    it('rejects weak password on register', async () => {
+      const res = await request(app).post(`${API}/auth/register`).send({
+        email: `weak_${Date.now()}@example.com`,
+        password: 'weak',
+        firstName: 'Weak',
+        lastName: 'Pass',
+      });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
+    });
   });
 
   describe('Tasks + tasks table', () => {
@@ -160,6 +193,40 @@ describe('API + DB integration', () => {
     it('requires auth for tasks', async () => {
       const res = await request(app).get(`${API}/tasks`);
       expect(res.status).toBe(401);
+    });
+
+    it('rejects create task without title', async () => {
+      const res = await request(app)
+        .post(`${API}/tasks`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ description: 'no title' });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(await prisma.task.count()).toBe(0);
+    });
+
+    it('forbids access to another users task', async () => {
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Private task' });
+      const taskId = created.body.data.id;
+
+      const other = await request(app).post(`${API}/auth/register`).send({
+        email: `other_${Date.now()}@example.com`,
+        password,
+        firstName: 'Other',
+        lastName: 'User',
+      });
+      const otherToken = other.body.data.tokens.accessToken;
+
+      const res = await request(app)
+        .get(`${API}/tasks/${taskId}`)
+        .set('Authorization', `Bearer ${otherToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
     });
   });
 });
