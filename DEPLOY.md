@@ -68,6 +68,16 @@ Render’s Node image is Debian-based; this usually clears the error without Doc
 
 If you keep Docker, image `CMD` must run `prisma migrate deploy` before `node dist/server.js`.
 
+## Troubleshooting: UI `/login` shows Not Found
+
+**Cause:** Static host has no file at `/login`. Only `/` serves `index.html` by default.
+
+**Fixes:**
+1. Open the UI **root** URL (`https://<ui>.onrender.com/`) — React then routes to login
+2. Redeploy UI after `spa-fallback` build script (copies `index.html` into `/login`, `/register`, etc.)
+3. Or add Render **Rewrite**: `/*` → `/index.html`
+
+## Free-tier limits
 - Web services sleep after ~15 minutes idle (cold start ~30–60s).
 - Free Postgres expires after **30 days** — upgrade or export before then.
 - Not suitable as always-on production without paid instances.
