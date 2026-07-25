@@ -1,64 +1,51 @@
-# Multi-stage build for production optimization
+# Multi-stage build — Debian slim (OpenSSL 3) to avoid Alpine/Prisma libssl.so.1.1 mismatch
 
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY src ./src
 
-# Generate Prisma Client
 RUN npx prisma generate
-
-# Build TypeScript
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 
-# Install production dependencies only
 RUN npm ci --only=production
 
-# Copy Prisma schema
 COPY prisma ./prisma/
 
-# Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN groupadd --system --gid 1001 nodejs \
+  && useradd --system --uid 1001 --gid nodejs nodejs \
+  && chown -R nodejs:nodejs /app
 
-# Change ownership
-RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
 USER nodejs
 
-# Expose port
 EXPOSE 3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start application
 CMD ["node", "dist/server.js"]
-
