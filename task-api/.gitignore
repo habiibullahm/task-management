@@ -34,8 +34,7 @@ coverage/
 .nyc_output/
 
 # Prisma
-prisma/migrations/
-!prisma/migrations/.gitkeep
+# Keep migrations committed for deploy (`prisma migrate deploy`)
 
 # Docker
 docker-compose.override.yml

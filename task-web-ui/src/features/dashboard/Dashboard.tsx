@@ -1,11 +1,27 @@
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
+import { useTaskStore } from '@/stores/task.store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { TaskStatus } from '@/types';
 
 export function Dashboard() {
   const { user, logout } = useAuthStore();
+  const { tasks, fetchTasks, isLoading } = useTaskStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchTasks({ limit: 100 });
+  }, [fetchTasks]);
+
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const inProgress = tasks.filter((t) => t.status === TaskStatus.IN_PROGRESS).length;
+    const completed = tasks.filter((t) => t.status === TaskStatus.DONE).length;
+    return { total, inProgress, completed };
+  }, [tasks]);
 
   const handleLogout = async () => {
     await logout();
@@ -41,7 +57,7 @@ export function Dashboard() {
               <CardDescription>All your tasks</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold">0</p>
+              <p className="text-4xl font-bold">{isLoading ? '…' : stats.total}</p>
             </CardContent>
           </Card>
 
@@ -51,7 +67,7 @@ export function Dashboard() {
               <CardDescription>Tasks you're working on</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold">0</p>
+              <p className="text-4xl font-bold">{isLoading ? '…' : stats.inProgress}</p>
             </CardContent>
           </Card>
 
@@ -61,7 +77,7 @@ export function Dashboard() {
               <CardDescription>Tasks you've finished</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold">0</p>
+              <p className="text-4xl font-bold">{isLoading ? '…' : stats.completed}</p>
             </CardContent>
           </Card>
         </div>
@@ -72,10 +88,17 @@ export function Dashboard() {
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Get started with these common tasks</CardDescription>
             </CardHeader>
-            <CardContent className="flex gap-4">
-              <Button>Create Task</Button>
-              <Button variant="outline">View Board</Button>
-              <Button variant="outline">Manage Teams</Button>
+            <CardContent className="flex flex-wrap gap-4">
+              <Button onClick={() => navigate('/tasks/new')}>Create Task</Button>
+              <Button variant="outline" onClick={() => navigate('/tasks')}>
+                My Tasks
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => toast.message('Teams coming in a later release')}
+              >
+                Manage Teams
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -83,4 +106,3 @@ export function Dashboard() {
     </div>
   );
 }
-

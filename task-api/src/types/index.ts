@@ -27,8 +27,9 @@ export interface RefreshTokenDto {
 export interface CreateTaskDto {
   title: string;
   description?: string;
+  status?: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | 'CANCELLED';
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  dueDate?: Date;
+  dueDate?: Date | string;
   assignedToId?: string;
   teamId?: string;
 }
@@ -38,8 +39,8 @@ export interface UpdateTaskDto {
   description?: string;
   status?: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | 'CANCELLED';
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  dueDate?: Date;
-  assignedToId?: string;
+  dueDate?: Date | string | null;
+  assignedToId?: string | null;
 }
 
 // Team DTOs
@@ -73,6 +74,7 @@ export interface TaskFilterParams extends PaginationParams {
   assignedToId?: string;
   teamId?: string;
   createdById?: string;
+  search?: string;
 }
 
 export interface TeamFilterParams extends PaginationParams {

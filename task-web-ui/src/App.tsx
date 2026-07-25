@@ -3,6 +3,8 @@ import { Toaster } from 'sonner';
 import { LoginForm } from './features/auth/LoginForm';
 import { RegisterForm } from './features/auth/RegisterForm';
 import { Dashboard } from './features/dashboard/Dashboard';
+import { TaskListPage } from './features/tasks/TaskListPage';
+import { TaskFormPage } from './features/tasks/TaskFormPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
@@ -17,6 +19,30 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedRoute>
+              <TaskListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tasks/new"
+          element={
+            <ProtectedRoute>
+              <TaskFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tasks/:id"
+          element={
+            <ProtectedRoute>
+              <TaskFormPage />
             </ProtectedRoute>
           }
         />
