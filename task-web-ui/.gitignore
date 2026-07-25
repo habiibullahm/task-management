@@ -15,6 +15,10 @@ dist
 dist-ssr
 *.tsbuildinfo
 
+# Vite cache
+.vite/
+**/.vite/
+
 # Environment variables
 .env
 .env.local

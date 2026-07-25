@@ -50,6 +50,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Vite cache
+.vite/
+**/.vite/
+
 # Coverage Reports
 coverage/
 .nyc_output/
