@@ -1,0 +1,2 @@
+// Team controller placeholder
+export {};
