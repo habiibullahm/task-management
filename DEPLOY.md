@@ -53,7 +53,21 @@ Render’s Node image is Debian-based; this usually clears the error without Doc
 - Confirm build ran `prisma generate` on the same OS as start
 - Confirm `DATABASE_URL` is set from the Render Postgres addon
 
-## Free-tier limits
+## Troubleshooting: `Database error` on login/register
+
+**Symptom:** UI/API returns `{"success":false,"message":"Database error"}` (HTTP 400).
+
+**Cause:** Postgres is reachable, but **tables were never created**. Common if the API runs as **Docker** with `CMD node dist/server.js` (no `prisma migrate deploy`).
+
+**Fix (fastest — Render UI):**
+1. API service → **Settings** → Runtime **Node** (not Docker), clear Dockerfile path
+2. **Start Command:** `npx prisma migrate deploy && node dist/server.js`
+3. **Build Command:** `npm ci && npx prisma generate && npm run build`
+4. **Manual Deploy**
+5. Confirm logs show migrate success, then retry register/login
+
+If you keep Docker, image `CMD` must run `prisma migrate deploy` before `node dist/server.js`.
+
 - Web services sleep after ~15 minutes idle (cold start ~30–60s).
 - Free Postgres expires after **30 days** — upgrade or export before then.
 - Not suitable as always-on production without paid instances.
