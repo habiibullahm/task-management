@@ -45,8 +45,25 @@ class App {
   }
 
   private initializeRoutes(): void {
+    const apiPrefix = env.get('API_PREFIX') as string;
+
+    // Friendly root for Render primary URL / browser visits
+    this.app.get('/', (_req, res) => {
+      res.json({
+        success: true,
+        message: 'Task Management API',
+        health: `${apiPrefix}/health`,
+        auth: `${apiPrefix}/auth`,
+        tasks: `${apiPrefix}/tasks`,
+      });
+    });
+
+    this.app.head('/', (_req, res) => {
+      res.status(200).end();
+    });
+
     // API routes
-    this.app.use(env.get('API_PREFIX'), routes);
+    this.app.use(apiPrefix, routes);
 
     // 404 handler
     this.app.use(ErrorMiddleware.notFound);
