@@ -26,7 +26,12 @@ export function RegisterForm() {
       toast.success('Registration successful!');
       navigate('/dashboard');
     } catch (error) {
-      toast.error(handleApiError(error, 'Registration failed'));
+      const message = handleApiError(error, 'Registration failed');
+      if (/email already registered/i.test(message)) {
+        toast.error('That email is already registered. Sign in instead.');
+      } else {
+        toast.error(message);
+      }
     }
   };
 
