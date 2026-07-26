@@ -165,14 +165,22 @@ export class AuthService {
 
   /**
    * Request password reset — always returns the same message (no email oracle).
-   * In test/dev, includes rawToken so flows can complete without email.
+   * Sends email via SMTP (preferred) or Resend when configured.
+   * Raw token is only returned in NODE_ENV=test (for CI/e2e without inbox access).
+   * In development without Resend, the reset URL is logged once.
    */
-  async forgotPassword(email: string): Promise<{ message: string; resetToken?: string }> {
+  async forgotPassword(email: string): Promise<{
+    message: string;
+    resetToken?: string;
+    emailSent: boolean;
+    devResetUrl?: string;
+    emailError?: string;
+  }> {
     const normalized = email.trim().toLowerCase();
     const user = await userRepository.findByEmail(normalized);
 
     if (!user || !user.isActive) {
-      return { message: GENERIC_FORGOT_MESSAGE };
+      return { message: GENERIC_FORGOT_MESSAGE, emailSent: false };
     }
 
     const rawToken = crypto.randomBytes(32).toString('hex');
@@ -186,15 +194,39 @@ export class AuthService {
     });
 
     const resetUrl = MailerUtil.buildResetUrl(rawToken);
-    const sent = await MailerUtil.sendPasswordResetEmail(user.email, resetUrl);
+    const mail = await MailerUtil.sendPasswordResetEmail(user.email, resetUrl);
+    const sent = mail.sent;
 
-    if (!sent && (env.isDevelopment() || env.isTest())) {
-      console.info(`[auth] Password reset link for ${user.email}: ${resetUrl}`);
+    if (!sent && env.isDevelopment()) {
+      if (!MailerUtil.isConfigured()) {
+        console.info(
+          `[auth] Password reset link (email not sent — set SMTP_* or RESEND_API_KEY): ${resetUrl}`
+        );
+      } else {
+        console.info(
+          `[auth] Password reset link (Resend failed: ${mail.error ?? 'unknown'}): ${resetUrl}`
+        );
+      }
     }
 
-    const result: { message: string; resetToken?: string } = { message: GENERIC_FORGOT_MESSAGE };
-    if (env.isTest() || env.isDevelopment()) {
+    const result: {
+      message: string;
+      resetToken?: string;
+      emailSent: boolean;
+      /** Development only — shown in UI when Resend is not configured / fails */
+      devResetUrl?: string;
+      emailError?: string;
+    } = {
+      message: GENERIC_FORGOT_MESSAGE,
+      emailSent: sent,
+    };
+
+    // Never expose tokens outside automated tests / local DX without successful email
+    if (env.isTest()) {
       result.resetToken = rawToken;
+    } else if (env.isDevelopment() && !sent) {
+      result.devResetUrl = resetUrl;
+      if (mail.error) result.emailError = mail.error;
     }
     return result;
   }

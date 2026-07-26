@@ -67,14 +67,30 @@ export const authService = {
     }
   },
 
-  async forgotPassword(email: string): Promise<{ message: string; resetToken?: string }> {
-    const response = await apiClient.post<ApiResponse<{ resetToken?: string }>>('/auth/forgot-password', {
+  async forgotPassword(email: string): Promise<{
+    message: string;
+    resetToken?: string;
+    emailSent?: boolean;
+    devResetUrl?: string;
+    emailError?: string;
+  }> {
+    const response = await apiClient.post<
+      ApiResponse<{
+        resetToken?: string;
+        emailSent?: boolean;
+        devResetUrl?: string;
+        emailError?: string;
+      }>
+    >('/auth/forgot-password', {
       email,
     });
     if (response.data.success) {
       return {
         message: response.data.message,
         resetToken: response.data.data?.resetToken,
+        emailSent: response.data.data?.emailSent,
+        devResetUrl: response.data.data?.devResetUrl,
+        emailError: response.data.data?.emailError,
       };
     }
     throw new Error(response.data.message || 'Unable to process password reset');

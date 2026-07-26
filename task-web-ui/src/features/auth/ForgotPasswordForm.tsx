@@ -12,6 +12,8 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,10 +21,18 @@ export function ForgotPasswordForm() {
     try {
       const result = await authService.forgotPassword(email);
       setSubmitted(true);
-      toast.success(result.message);
-      if (result.resetToken) {
-        // Dev/test only — helps local reset without email
-        toast.message('Dev reset token available — open Reset password with the link from the API log.');
+      if (result.devResetUrl) {
+        setDevResetUrl(result.devResetUrl);
+        setEmailError(result.emailError ?? null);
+        toast.message(
+          result.emailError
+            ? `Email failed: ${result.emailError}`
+            : 'Email not configured — use the local reset link below'
+        );
+      } else if (result.emailSent) {
+        toast.success('Check your inbox for the reset link');
+      } else {
+        toast.success(result.message);
       }
     } catch (error) {
       toast.error(handleApiError(error, 'Unable to process password reset'));
@@ -43,10 +53,25 @@ export function ForgotPasswordForm() {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {submitted ? (
-              <p className="text-sm text-muted-foreground text-center">
-                If an account exists for that email, password reset instructions have been sent. Check your
-                inbox, then use the link to choose a new password.
-              </p>
+              <div className="space-y-3 text-sm text-muted-foreground text-center">
+                <p>
+                  If an account exists for that email, password reset instructions have been sent. Check your
+                  inbox, then use the link to choose a new password.
+                </p>
+                {devResetUrl && (
+                  <div className="rounded-md border bg-amber-50 p-3 text-left text-amber-950">
+                    <p className="mb-2 font-medium">Local testing — email was not sent</p>
+                    {emailError && (
+                      <p className="mb-2 text-xs">
+                        Resend error: <span className="font-mono">{emailError}</span>
+                      </p>
+                    )}
+                    <a href={devResetUrl} className="break-all text-primary underline">
+                      {devResetUrl}
+                    </a>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>

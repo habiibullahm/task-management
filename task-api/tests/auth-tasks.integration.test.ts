@@ -1,10 +1,20 @@
 import request from 'supertest';
+import nodemailer from 'nodemailer';
 import Database, { prisma } from '../src/config/database';
 import app from '../src/app';
 import { resetDatabase } from './helpers/db';
 import { TEST_PASSWORD, authHeader, registerUser } from './helpers/auth';
 
 const API = '/api/v1';
+
+function clearMailerEnv(): void {
+  process.env.SMTP_HOST = '';
+  process.env.SMTP_PORT = '';
+  process.env.SMTP_USER = '';
+  process.env.SMTP_PASS = '';
+  process.env.RESEND_API_KEY = '';
+  process.env.EMAIL_FROM = '';
+}
 
 describe('API + DB integration', () => {
   beforeAll(async () => {
@@ -155,16 +165,21 @@ describe('API + DB integration', () => {
     });
 
     it('forgot-password is generic and reset-password updates credentials', async () => {
+      clearMailerEnv();
       const { email } = await registerUser({ firstName: 'Reset' });
       const forgotUnknown = await request(app)
         .post(`${API}/auth/forgot-password`)
         .send({ email: 'nobody_exists@example.com' });
       expect(forgotUnknown.status).toBe(200);
       expect(forgotUnknown.body.message).toMatch(/if an account exists/i);
+      expect(forgotUnknown.body.data.emailSent).toBe(false);
 
       const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
       expect(forgot.status).toBe(200);
       expect(forgot.body.message).toMatch(/if an account exists/i);
+      expect(forgot.body.data.emailSent).toBe(false);
+      expect(forgot.body.data.devResetUrl).toBeUndefined();
+      expect(forgot.body.data.emailError).toBeUndefined();
       const resetToken = forgot.body.data?.resetToken as string;
       expect(resetToken).toBeTruthy();
 
@@ -183,6 +198,96 @@ describe('API + DB integration', () => {
         .post(`${API}/auth/reset-password`)
         .send({ token: resetToken, newPassword: 'AnotherSecurePass123!@#' });
       expect(reuse.status).toBe(400);
+    });
+
+    it('forgot-password sends Resend email when RESEND_API_KEY is set', async () => {
+      const { email } = await registerUser({ firstName: 'Mail' });
+      clearMailerEnv();
+      process.env.RESEND_API_KEY = 're_test_key';
+      process.env.EMAIL_FROM = 'Task Management <onboarding@resend.dev>';
+      process.env.APP_URL = 'http://localhost:3000';
+
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+      });
+      const originalFetch = global.fetch;
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(200);
+        expect(forgot.body.data.emailSent).toBe(true);
+        expect(forgot.body.data.resetToken).toBeTruthy();
+        expect(forgot.body.data.devResetUrl).toBeUndefined();
+        expect(forgot.body.data.emailError).toBeUndefined();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://api.resend.com/emails');
+        expect(init.method).toBe('POST');
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer re_test_key');
+        const body = JSON.parse(String(init.body));
+        expect(body.to).toEqual([email]);
+        expect(body.subject).toMatch(/reset/i);
+        expect(body.html).toMatch(/Reset password/);
+        expect(body.text).toMatch(/reset-password\?token=/);
+        expect(body.html).toMatch(/http:\/\/localhost:3000\/reset-password\?token=/);
+      } finally {
+        global.fetch = originalFetch;
+        clearMailerEnv();
+      }
+    });
+
+    it('forgot-password prefers SMTP when SMTP_* is configured', async () => {
+      const { email } = await registerUser({ firstName: 'Smtp' });
+      clearMailerEnv();
+      process.env.SMTP_HOST = 'smtp.example.com';
+      process.env.SMTP_PORT = '587';
+      process.env.SMTP_USER = 'smtp-user@example.com';
+      process.env.SMTP_PASS = 'smtp-pass';
+      process.env.EMAIL_FROM = 'Task Management <smtp-user@example.com>';
+      process.env.APP_URL = 'http://localhost:3000';
+      // Even if Resend is set, SMTP should win
+      process.env.RESEND_API_KEY = 're_should_not_be_used';
+
+      const sendMail = jest.fn().mockResolvedValue({ messageId: 'smtp-test-id' });
+      const createTransportSpy = jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue({ sendMail } as unknown as ReturnType<typeof nodemailer.createTransport>);
+
+      const fetchMock = jest.fn();
+      const originalFetch = global.fetch;
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(200);
+        expect(forgot.body.data.emailSent).toBe(true);
+        expect(forgot.body.data.resetToken).toBeTruthy();
+        expect(createTransportSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            host: 'smtp.example.com',
+            port: 587,
+            auth: { user: 'smtp-user@example.com', pass: 'smtp-pass' },
+          })
+        );
+        expect(sendMail).toHaveBeenCalledTimes(1);
+        expect(sendMail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            to: email,
+            from: 'Task Management <smtp-user@example.com>',
+            subject: expect.stringMatching(/reset/i),
+            text: expect.stringMatching(/reset-password\?token=/),
+            html: expect.stringMatching(/http:\/\/localhost:3000\/reset-password\?token=/),
+          })
+        );
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        createTransportSpy.mockRestore();
+        global.fetch = originalFetch;
+        clearMailerEnv();
+      }
     });
 
     it('lists tasks sorted by dueDate when requested', async () => {
@@ -332,6 +437,36 @@ describe('API + DB integration', () => {
       expect(bySearch.status).toBe(200);
       expect(bySearch.body.data).toHaveLength(1);
       expect(bySearch.body.data[0].title).toBe('Alpha todo');
+    });
+
+    it('filters tasks by priority', async () => {
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'High one', priority: 'HIGH' });
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Low one', priority: 'LOW' });
+
+      const res = await request(app)
+        .get(`${API}/tasks`)
+        .query({ priority: 'HIGH' })
+        .set(authHeader(token));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].title).toBe('High one');
+      expect(res.body.data[0].priority).toBe('HIGH');
+    });
+
+    it('rejects invalid sort query', async () => {
+      const res = await request(app)
+        .get(`${API}/tasks`)
+        .query({ sort: 'priority' })
+        .set(authHeader(token));
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/sort/i);
     });
 
     it('rejects invalid status on create', async () => {

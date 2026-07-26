@@ -70,7 +70,19 @@ export function Dashboard() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md"
+            role="link"
+            tabIndex={0}
+            aria-label="View all tasks"
+            onClick={() => navigate('/tasks')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                navigate('/tasks');
+              }
+            }}
+          >
             <CardHeader>
               <CardTitle>Total Tasks</CardTitle>
               <CardDescription>All your tasks</CardDescription>
@@ -86,7 +98,16 @@ export function Dashboard() {
               <Card
                 key={status}
                 className="cursor-pointer transition-shadow hover:shadow-md"
+                role="link"
+                tabIndex={0}
+                aria-label={`View ${meta.title} tasks`}
                 onClick={() => navigate(`/tasks?status=${status}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/tasks?status=${status}`);
+                  }
+                }}
               >
                 <CardHeader>
                   <CardTitle>{meta.title}</CardTitle>

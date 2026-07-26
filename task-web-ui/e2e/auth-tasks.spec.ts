@@ -186,20 +186,54 @@ test.describe('Tasks', () => {
     await expect(page.getByText('Beta filter')).toBeVisible();
     await expect(page.getByText('Alpha filter')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'All', exact: true }).click();
+    await page.getByRole('button', { name: 'All statuses', exact: true }).click();
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
     await expect(page.getByText('Alpha filter')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Beta filter')).toHaveCount(0);
+    await expect(page).toHaveURL(/search=Alpha/, { timeout: 10_000 });
   });
 
   test('priority filter and no-match empty state', async ({ page }) => {
     await registerViaUi(page);
     await createTaskViaUi(page, { title: 'Low priority only', priority: 'LOW' });
 
-    await page.getByRole('button', { name: 'Urgent priority', exact: true }).click();
+    await page.getByRole('group', { name: 'Filter by priority' }).getByRole('button', { name: 'Urgent', exact: true }).click();
     await expect(page.getByText('No tasks match')).toBeVisible();
     await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
     await expect(page.getByText('Low priority only')).toBeVisible();
+  });
+
+  test('cancelled chip and sort alone keep no-tasks-yet empty state', async ({ page }) => {
+    await registerViaUi(page);
+    await page.getByRole('button', { name: 'My Tasks', exact: true }).click();
+    await expect(page).toHaveURL(/\/tasks/);
+
+    await expect(page.getByRole('group', { name: 'Filter by status' }).getByRole('button', { name: 'Cancelled', exact: true })).toBeVisible();
+    await expect(page.getByText('No tasks yet')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Due date', exact: true }).click();
+    await expect(page).toHaveURL(/sort=dueDate/);
+    await expect(page.getByText('No tasks yet')).toBeVisible();
+    await expect(page.getByText('No tasks match')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Recently updated', exact: true }).click();
+    await expect(page).not.toHaveURL(/sort=/);
+    await expect(page.getByText('No tasks yet')).toBeVisible();
+  });
+
+  test('dashboard status card deep-links to filtered task list', async ({ page }) => {
+    await registerViaUi(page);
+    await createTaskViaUi(page, { title: 'Dashboard todo', status: 'TODO' });
+    await page.goto('/dashboard');
+    await expect(page.getByText(/welcome back/i)).toBeVisible();
+
+    await page.getByRole('link', { name: 'View To Do tasks', exact: true }).click();
+    await expect(page).toHaveURL(/status=TODO/);
+    await expect(page.getByText('Dashboard todo')).toBeVisible();
+
+    await page.goto('/dashboard');
+    await page.getByRole('link', { name: 'View all tasks', exact: true }).click();
+    await expect(page).toHaveURL(/\/tasks\/?$/);
   });
 
   test('delete task after confirm', async ({ page }) => {

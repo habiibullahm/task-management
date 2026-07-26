@@ -25,100 +25,123 @@ const STATUS_FILTERS: Array<{ label: string; value?: TaskStatus }> = [
 ];
 
 const PRIORITY_FILTERS: Array<{ label: string; value?: Priority }> = [
-  { label: 'All priorities', value: undefined },
-  { label: 'Low priority', value: PriorityEnum.LOW },
-  { label: 'Medium priority', value: PriorityEnum.MEDIUM },
-  { label: 'High priority', value: PriorityEnum.HIGH },
-  { label: 'Urgent priority', value: PriorityEnum.URGENT },
+  { label: 'All', value: undefined },
+  { label: 'Low', value: PriorityEnum.LOW },
+  { label: 'Medium', value: PriorityEnum.MEDIUM },
+  { label: 'High', value: PriorityEnum.HIGH },
+  { label: 'Urgent', value: PriorityEnum.URGENT },
 ];
+
+type ListQuery = {
+  status?: TaskStatus;
+  priority?: Priority;
+  sort?: 'dueDate' | 'updatedAt';
+  search?: string;
+};
+
+function parseListQuery(params: URLSearchParams): ListQuery {
+  const statusParam = params.get('status') as TaskStatus | null;
+  const priorityParam = params.get('priority') as Priority | null;
+  const sortParam = params.get('sort');
+  const searchParam = params.get('search')?.trim() || undefined;
+
+  return {
+    status: statusParam && Object.values(Status).includes(statusParam) ? statusParam : undefined,
+    priority:
+      priorityParam && Object.values(PriorityEnum).includes(priorityParam)
+        ? priorityParam
+        : undefined,
+    // Omit default updatedAt from URL; only persist dueDate (or explicit updatedAt if present)
+    sort: sortParam === 'dueDate' || sortParam === 'updatedAt' ? sortParam : undefined,
+    search: searchParam,
+  };
+}
 
 export function TaskListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout } = useAuthStore();
   const { tasks, isLoading, deleteTask, updateTaskStatus, setFilters, filters } = useTaskStore();
-  const [search, setSearch] = useState(filters.search ?? '');
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
 
+  const syncUrl = (next: ListQuery) => {
+    const params = new URLSearchParams();
+    if (next.status) params.set('status', next.status);
+    if (next.priority) params.set('priority', next.priority);
+    // Keep URLs short: only write non-default sort
+    if (next.sort === 'dueDate') params.set('sort', 'dueDate');
+    if (next.search?.trim()) params.set('search', next.search.trim());
+    setSearchParams(params, { replace: true });
+  };
+
+  // URL is the source of truth for list filters
   useEffect(() => {
-    const statusParam = searchParams.get('status') as TaskStatus | null;
-    const priorityParam = searchParams.get('priority') as Priority | null;
-    const sortParam = searchParams.get('sort') as 'dueDate' | 'updatedAt' | null;
-    const next = {
-      status: statusParam && Object.values(Status).includes(statusParam) ? statusParam : undefined,
-      priority:
-        priorityParam && Object.values(PriorityEnum).includes(priorityParam)
-          ? priorityParam
-          : undefined,
-      sort: sortParam === 'dueDate' || sortParam === 'updatedAt' ? sortParam : undefined,
-      search: useTaskStore.getState().filters.search,
+    const next = parseListQuery(searchParams);
+    setSearch(next.search ?? '');
+    setFilters({
+      status: next.status,
+      priority: next.priority,
+      sort: next.sort,
+      search: next.search,
       limit: 50,
-    };
-    setFilters(next);
-    // Sync list from URL query
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Debounce search → URL (which then drives fetch via the effect above)
   useEffect(() => {
     const trimmed = search.trim();
-    const nextSearch = trimmed || undefined;
+    const urlSearch = searchParams.get('search')?.trim() || '';
+    if (trimmed === urlSearch) return;
 
     const timer = window.setTimeout(() => {
       const current = useTaskStore.getState().filters;
-      if (nextSearch === current.search) return;
-      setFilters({ ...current, search: nextSearch, limit: 50 });
+      syncUrl({
+        status: current.status,
+        priority: current.priority,
+        sort: current.sort,
+        search: trimmed || undefined,
+      });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [search, setFilters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const syncUrl = (next: {
-    status?: TaskStatus;
-    priority?: Priority;
-    sort?: 'dueDate' | 'updatedAt';
-  }) => {
-    const params = new URLSearchParams();
-    if (next.status) params.set('status', next.status);
-    if (next.priority) params.set('priority', next.priority);
-    if (next.sort) params.set('sort', next.sort);
-    setSearchParams(params, { replace: true });
-  };
-
   const handleStatusFilter = (status?: TaskStatus) => {
-    const next = {
-      ...filters,
+    syncUrl({
       status,
+      priority: filters.priority,
+      sort: filters.sort,
       search: search.trim() || undefined,
-      limit: 50 as const,
-    };
-    setFilters(next);
-    syncUrl({ status, priority: filters.priority, sort: filters.sort });
+    });
   };
 
   const handlePriorityFilter = (priority?: Priority) => {
-    const next = {
-      ...filters,
+    syncUrl({
+      status: filters.status,
       priority,
+      sort: filters.sort,
       search: search.trim() || undefined,
-      limit: 50 as const,
-    };
-    setFilters(next);
-    syncUrl({ status: filters.status, priority, sort: filters.sort });
+    });
   };
 
-  const handleSort = (sort?: 'dueDate' | 'updatedAt') => {
-    const next = { ...filters, sort, search: search.trim() || undefined, limit: 50 as const };
-    setFilters(next);
-    syncUrl({ status: filters.status, priority: filters.priority, sort });
+  const handleSort = (sort: 'dueDate' | 'updatedAt') => {
+    syncUrl({
+      status: filters.status,
+      priority: filters.priority,
+      sort: sort === 'updatedAt' ? undefined : sort,
+      search: search.trim() || undefined,
+    });
   };
 
   const clearFilters = () => {
     setSearch('');
-    setFilters({ limit: 50 });
     setSearchParams({}, { replace: true });
   };
 
@@ -141,8 +164,10 @@ export function TaskListPage() {
     }
   };
 
-  const hasActiveFilters = Boolean(filters.status || filters.priority || filters.search || filters.sort);
+  // Sort alone must not count as an "active filter" for empty-state messaging
+  const hasActiveFilters = Boolean(filters.status || filters.priority || filters.search);
   const empty = useMemo(() => !isLoading && tasks.length === 0, [isLoading, tasks.length]);
+  const sortIsDueDate = filters.sort === 'dueDate';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -185,41 +210,43 @@ export function TaskListPage() {
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search tasks"
             />
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
               {STATUS_FILTERS.map((filter) => (
                 <Button
-                  key={filter.label}
+                  key={`status-${filter.label}`}
                   size="sm"
                   variant={filters.status === filter.value ? 'default' : 'outline'}
+                  aria-label={filter.value ? filter.label : 'All statuses'}
                   onClick={() => handleStatusFilter(filter.value)}
                 >
                   {filter.label}
                 </Button>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by priority">
               {PRIORITY_FILTERS.map((filter) => (
                 <Button
-                  key={filter.label}
+                  key={`priority-${filter.label}`}
                   size="sm"
                   variant={filters.priority === filter.value ? 'default' : 'outline'}
+                  aria-label={filter.value ? filter.label : 'All priorities'}
                   onClick={() => handlePriorityFilter(filter.value)}
                 >
                   {filter.label}
                 </Button>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Sort tasks">
               <Button
                 size="sm"
-                variant={!filters.sort || filters.sort === 'updatedAt' ? 'default' : 'outline'}
+                variant={!sortIsDueDate ? 'default' : 'outline'}
                 onClick={() => handleSort('updatedAt')}
               >
                 Recently updated
               </Button>
               <Button
                 size="sm"
-                variant={filters.sort === 'dueDate' ? 'default' : 'outline'}
+                variant={sortIsDueDate ? 'default' : 'outline'}
                 onClick={() => handleSort('dueDate')}
               >
                 Due date

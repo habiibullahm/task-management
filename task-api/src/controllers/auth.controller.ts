@@ -119,7 +119,19 @@ export class AuthController {
       const { email }: ForgotPasswordDto = req.body;
       const result = await authService.forgotPassword(email);
 
-      ResponseUtil.success(res, result.message, result.resetToken ? { resetToken: result.resetToken } : undefined);
+      const data: {
+        resetToken?: string;
+        emailSent: boolean;
+        devResetUrl?: string;
+        emailError?: string;
+      } = {
+        emailSent: result.emailSent,
+      };
+      if (result.resetToken) data.resetToken = result.resetToken;
+      if (result.devResetUrl) data.devResetUrl = result.devResetUrl;
+      if (result.emailError) data.emailError = result.emailError;
+
+      ResponseUtil.success(res, result.message, data);
     } catch (error) {
       next(error);
     }
