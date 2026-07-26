@@ -5,19 +5,18 @@
     "lib": ["ES2020"],
     
     /* Modules */
-    "module": "commonjs",
+    "module": "Node16",
     "rootDir": "./src",
-    "moduleResolution": "node",
-    "baseUrl": "./src",
+    "moduleResolution": "Node16",
     "paths": {
-      "@controllers/*": ["controllers/*"],
-      "@services/*": ["services/*"],
-      "@repositories/*": ["repositories/*"],
-      "@middleware/*": ["middleware/*"],
-      "@routes/*": ["routes/*"],
-      "@config/*": ["config/*"],
-      "@utils/*": ["utils/*"],
-      "@types/*": ["types/*"]
+      "@controllers/*": ["./src/controllers/*"],
+      "@services/*": ["./src/services/*"],
+      "@repositories/*": ["./src/repositories/*"],
+      "@middleware/*": ["./src/middleware/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@config/*": ["./src/config/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@types/*": ["./src/types/*"]
     },
     "resolveJsonModule": true,
     
