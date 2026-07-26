@@ -20,10 +20,6 @@ export function ForgotPasswordForm() {
       const result = await authService.forgotPassword(email);
       setSubmitted(true);
       toast.success(result.message);
-      if (result.resetToken) {
-        // Dev/test only — helps local reset without email
-        toast.message('Dev reset token available — open Reset password with the link from the API log.');
-      }
     } catch (error) {
       toast.error(handleApiError(error, 'Unable to process password reset'));
     } finally {

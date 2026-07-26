@@ -1,6 +1,7 @@
 # Render Blueprint — Dashboard → New → Blueprint → connect this repo
 # Free tier notes: web services sleep after idle; free Postgres expires after 30 days.
-# After deploy, set CORS_ORIGIN to the UI URL and VITE_API_BASE_URL to https://<api>/api/v1 (rebuild UI).
+# After deploy, set CORS_ORIGIN + APP_URL to the UI URL, VITE_API_BASE_URL to https://<api>/api/v1 (rebuild UI),
+# and RESEND_API_KEY (optional EMAIL_FROM) so forgot-password emails actually send.
 #
 # IMPORTANT: API must use runtime: node (NOT Docker). Alpine Docker breaks Prisma (libssl.so.1.1).
 # If the service was switched to Docker in the UI, set Runtime back to Node and clear Dockerfile path.

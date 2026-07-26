@@ -185,6 +185,48 @@ describe('API + DB integration', () => {
       expect(reuse.status).toBe(400);
     });
 
+    it('forgot-password sends Resend email when RESEND_API_KEY is set', async () => {
+      const { email } = await registerUser({ firstName: 'Mail' });
+      const previousKey = process.env.RESEND_API_KEY;
+      const previousFrom = process.env.EMAIL_FROM;
+      const previousAppUrl = process.env.APP_URL;
+      process.env.RESEND_API_KEY = 're_test_key';
+      process.env.EMAIL_FROM = 'Task Management <onboarding@resend.dev>';
+      process.env.APP_URL = 'http://localhost:3000';
+
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+      });
+      const originalFetch = global.fetch;
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(200);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://api.resend.com/emails');
+        expect(init.method).toBe('POST');
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer re_test_key');
+        const body = JSON.parse(String(init.body));
+        expect(body.to).toEqual([email]);
+        expect(body.subject).toMatch(/reset/i);
+        expect(body.html).toMatch(/Reset password/);
+        expect(body.text).toMatch(/reset-password\?token=/);
+        expect(body.html).toMatch(/http:\/\/localhost:3000\/reset-password\?token=/);
+      } finally {
+        global.fetch = originalFetch;
+        if (previousKey === undefined) delete process.env.RESEND_API_KEY;
+        else process.env.RESEND_API_KEY = previousKey;
+        if (previousFrom === undefined) delete process.env.EMAIL_FROM;
+        else process.env.EMAIL_FROM = previousFrom;
+        if (previousAppUrl === undefined) delete process.env.APP_URL;
+        else process.env.APP_URL = previousAppUrl;
+      }
+    });
+
     it('lists tasks sorted by dueDate when requested', async () => {
       const { token } = await registerUser({ firstName: 'Sort' });
       await request(app)

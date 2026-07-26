@@ -165,7 +165,9 @@ export class AuthService {
 
   /**
    * Request password reset — always returns the same message (no email oracle).
-   * In test/dev, includes rawToken so flows can complete without email.
+   * Sends email via Resend when RESEND_API_KEY is set.
+   * Raw token is only returned in NODE_ENV=test (for CI/e2e without inbox access).
+   * In development without Resend, the reset URL is logged once.
    */
   async forgotPassword(email: string): Promise<{ message: string; resetToken?: string }> {
     const normalized = email.trim().toLowerCase();
@@ -188,12 +190,13 @@ export class AuthService {
     const resetUrl = MailerUtil.buildResetUrl(rawToken);
     const sent = await MailerUtil.sendPasswordResetEmail(user.email, resetUrl);
 
-    if (!sent && (env.isDevelopment() || env.isTest())) {
-      console.info(`[auth] Password reset link for ${user.email}: ${resetUrl}`);
+    if (!sent && env.isDevelopment()) {
+      console.info(`[auth] Password reset link (email not sent — set RESEND_API_KEY): ${resetUrl}`);
     }
 
     const result: { message: string; resetToken?: string } = { message: GENERIC_FORGOT_MESSAGE };
-    if (env.isTest() || env.isDevelopment()) {
+    // Never expose tokens outside automated tests
+    if (env.isTest()) {
       result.resetToken = rawToken;
     }
     return result;
