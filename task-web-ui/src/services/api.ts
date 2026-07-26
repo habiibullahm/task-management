@@ -71,8 +71,16 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiErrorResponse>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const requestUrl = originalRequest?.url ?? '';
+    // Login/register/refresh 401s are credential failures — do not attempt token refresh or hard-redirect
+    const isCredentialAuthRequest = /\/auth\/(login|register|refresh)(?:\?|$)/.test(requestUrl);
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isCredentialAuthRequest
+    ) {
       originalRequest._retry = true;
 
       try {
@@ -99,7 +107,9 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(new Error(handleApiError(refreshError, 'Session expired')));
       }
     }

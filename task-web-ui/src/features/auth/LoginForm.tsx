@@ -26,7 +26,13 @@ export function LoginForm() {
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (error) {
-      toast.error(handleApiError(error, 'Login failed'));
+      const message = handleApiError(error, 'Login failed');
+      // Keep API vague ("Invalid credentials"); guide users without revealing if the email exists
+      if (/invalid credentials/i.test(message)) {
+        toast.error('Check your email and password, or create an account.');
+      } else {
+        toast.error(message);
+      }
     }
   };
 
@@ -68,7 +74,11 @@ export function LoginForm() {
                   type="button"
                   variant="link"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() => toast.info('Password reset coming soon')}
+                  onClick={() =>
+                    toast.info(
+                      'Password reset is not available yet. Double-check your password, or create a new account if you have not registered.'
+                    )
+                  }
                 >
                   Forgot password?
                 </Button>
