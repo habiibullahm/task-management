@@ -15,26 +15,43 @@
 3. Set required env vars when prompted:
    - **API `CORS_ORIGIN`**: `https://<your-ui-service>.onrender.com`
    - **API `APP_URL`**: same as UI URL (used in password-reset email links)
-   - **API `RESEND_API_KEY`**: Resend API key so forgot-password sends a real email
-   - **API `EMAIL_FROM`** (optional): e.g. `Task Management <onboarding@resend.dev>` for Resend test sender, or your verified domain
+   - **API mailer (pick one)**:
+     - **Preferred — SMTP** (e.g. Gmail App Password): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
+     - **Optional — Resend**: `RESEND_API_KEY` (+ optional `EMAIL_FROM`). Ignored when SMTP_* is set.
    - **UI `VITE_API_BASE_URL`**: `https://<your-api-service>.onrender.com/api/v1`
 4. Deploy. After API URL is known, update UI env and **redeploy UI** so Vite bakes the API URL into the static build.
 5. Smoke test: register → Create Task → My Tasks → change status → edit → delete → Settings (change password) → Forgot password (check inbox for reset link).
 
-### Password reset email (Resend)
+### Password reset email
 
-Local:
+Mailer is optional. Forgot-password always returns a generic success message (never reveals whether the email exists). In development, if send fails, the API may return `devResetUrl` / `emailError` for local testing.
+
+**Option A — Gmail SMTP (recommended for personal demos)**
 
 ```bash
 # task-api/.env
 APP_URL=http://localhost:3000
-RESEND_API_KEY=re_xxxxxxxx
-EMAIL_FROM=Task Management <onboarding@resend.dev>
+CORS_ORIGIN=http://localhost:3000
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASS=your-16-char-app-password
+EMAIL_FROM=Task Management <you@gmail.com>
 ```
 
-Without `RESEND_API_KEY`, forgot-password still succeeds with a generic message; in development the reset URL is printed in the API console.
+**Option B — Resend**
 
-On Render, set `APP_URL`, `RESEND_API_KEY`, and optionally `EMAIL_FROM` on the API service (already listed in `render.yaml` as sync:false).
+```bash
+# task-api/.env
+APP_URL=http://localhost:3000
+CORS_ORIGIN=http://localhost:3000
+RESEND_API_KEY=re_xxxxxxxx
+EMAIL_FROM=onboarding@resend.dev
+```
+
+Without a mailer, forgot-password still succeeds with a generic message; in development the reset URL is printed in the API console / returned as `devResetUrl`.
+
+On Render, set `APP_URL`, `CORS_ORIGIN`, and either SMTP_* or `RESEND_API_KEY` on the API service (`render.yaml` lists them as sync:false).
 
 ## Seed demo tasks (optional)
 

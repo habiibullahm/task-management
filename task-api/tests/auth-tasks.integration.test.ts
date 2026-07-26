@@ -439,6 +439,36 @@ describe('API + DB integration', () => {
       expect(bySearch.body.data[0].title).toBe('Alpha todo');
     });
 
+    it('filters tasks by priority', async () => {
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'High one', priority: 'HIGH' });
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Low one', priority: 'LOW' });
+
+      const res = await request(app)
+        .get(`${API}/tasks`)
+        .query({ priority: 'HIGH' })
+        .set(authHeader(token));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].title).toBe('High one');
+      expect(res.body.data[0].priority).toBe('HIGH');
+    });
+
+    it('rejects invalid sort query', async () => {
+      const res = await request(app)
+        .get(`${API}/tasks`)
+        .query({ sort: 'priority' })
+        .set(authHeader(token));
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/sort/i);
+    });
+
     it('rejects invalid status on create', async () => {
       const res = await request(app)
         .post(`${API}/tasks`)
