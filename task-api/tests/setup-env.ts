@@ -10,8 +10,7 @@ process.env.RATE_LIMIT_WINDOW_MS = '900000';
 process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
 process.env.LOG_LEVEL = 'error';
 
-// Prefer TEST_DATABASE_URL (CI / local test DB); fall back to DATABASE_URL
+// Always use the dedicated test DB (never the app DATABASE_URL / .env).
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ||
-  process.env.DATABASE_URL ||
   'postgresql://postgres:postgres@localhost:5432/task_management_test?schema=public';

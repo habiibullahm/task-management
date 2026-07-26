@@ -2,6 +2,7 @@ import request from 'supertest';
 import Database, { prisma } from '../src/config/database';
 import app from '../src/app';
 import { resetDatabase } from './helpers/db';
+import { TEST_PASSWORD, authHeader, registerUser } from './helpers/auth';
 
 const API = '/api/v1';
 
@@ -18,61 +19,49 @@ describe('API + DB integration', () => {
     await resetDatabase();
   });
 
-  describe('GET /health', () => {
-    it('returns ok without auth', async () => {
+  describe('Root + health', () => {
+    it('GET / returns friendly API info', async () => {
+      const res = await request(app).get('/');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.health).toBe(`${API}/health`);
+    });
+
+    it('GET /health returns ok without auth', async () => {
       const res = await request(app).get(`${API}/health`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
   });
 
-  describe('Auth + users table', () => {
-    const password = 'SecurePass123!@#';
-
+  describe('Auth', () => {
     it('registers a user and persists to the database', async () => {
       const email = `reg_${Date.now()}@example.com`;
-
-      const res = await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'Test',
-        lastName: 'User',
-      });
+      const { res } = await registerUser({ email, firstName: 'Test' });
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.user.email).toBe(email);
       expect(res.body.data.tokens.accessToken).toBeDefined();
+      expect(res.body.data.tokens.refreshToken).toBeDefined();
 
       const row = await prisma.user.findUnique({ where: { email } });
       expect(row).not.toBeNull();
-      expect(row!.password).not.toBe(password);
+      expect(row!.password).not.toBe(TEST_PASSWORD);
       expect(row!.firstName).toBe('Test');
     });
 
     it('logs in an existing user', async () => {
-      const email = `login_${Date.now()}@example.com`;
-      await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'Login',
-        lastName: 'User',
-      });
-
+      const { email, password } = await registerUser({ firstName: 'Login' });
       const res = await request(app).post(`${API}/auth/login`).send({ email, password });
+
       expect(res.status).toBe(200);
       expect(res.body.data.tokens.accessToken).toBeDefined();
+      expect(res.body.data.user.email).toBe(email);
     });
 
     it('rejects invalid credentials', async () => {
-      const email = `bad_${Date.now()}@example.com`;
-      await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'Bad',
-        lastName: 'Login',
-      });
-
+      const { email } = await registerUser({ firstName: 'Bad' });
       const res = await request(app)
         .post(`${API}/auth/login`)
         .send({ email, password: 'WrongPass1!@#' });
@@ -83,108 +72,208 @@ describe('API + DB integration', () => {
 
     it('rejects duplicate email registration', async () => {
       const email = `dup_${Date.now()}@example.com`;
-      await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'One',
-        lastName: 'User',
-      });
+      await registerUser({ email, firstName: 'One' });
 
-      const res = await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'Two',
-        lastName: 'User',
-      });
-
+      const { res } = await registerUser({ email, firstName: 'Two' });
       expect(res.status).toBe(409);
       expect(res.body.success).toBe(false);
       expect(await prisma.user.count({ where: { email } })).toBe(1);
     });
 
     it('rejects weak password on register', async () => {
-      const res = await request(app).post(`${API}/auth/register`).send({
+      const { res } = await registerUser({
         email: `weak_${Date.now()}@example.com`,
         password: 'weak',
         firstName: 'Weak',
-        lastName: 'Pass',
       });
 
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.body.success).toBe(false);
     });
+
+    it('returns profile for authenticated user', async () => {
+      const { token, email, userId } = await registerUser({ firstName: 'Profile' });
+      const res = await request(app).get(`${API}/auth/profile`).set(authHeader(token!));
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(userId);
+      expect(res.body.data.email).toBe(email);
+      expect(res.body.data.password).toBeUndefined();
+    });
+
+    it('requires auth for profile', async () => {
+      const res = await request(app).get(`${API}/auth/profile`);
+      expect(res.status).toBe(401);
+    });
+
+    it('refreshes access token with refresh token', async () => {
+      const { refreshToken } = await registerUser();
+      const res = await request(app)
+        .post(`${API}/auth/refresh`)
+        .send({ refreshToken });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+    });
+
+    it('rejects invalid refresh token', async () => {
+      const res = await request(app)
+        .post(`${API}/auth/refresh`)
+        .send({ refreshToken: 'not-a-valid-token' });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('logs out when authenticated', async () => {
+      const { token } = await registerUser();
+      const res = await request(app).post(`${API}/auth/logout`).set(authHeader(token!));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it('requires auth for logout', async () => {
+      const res = await request(app).post(`${API}/auth/logout`);
+      expect(res.status).toBe(401);
+    });
   });
 
-  describe('Tasks + tasks table', () => {
-    const password = 'SecurePass123!@#';
+  describe('Tasks', () => {
     let token: string;
     let userId: string;
 
     beforeEach(async () => {
-      const email = `tasks_${Date.now()}@example.com`;
-      const reg = await request(app).post(`${API}/auth/register`).send({
-        email,
-        password,
-        firstName: 'Task',
-        lastName: 'Owner',
-      });
-      token = reg.body.data.tokens.accessToken;
-      userId = reg.body.data.user.id;
+      const registered = await registerUser({ firstName: 'Task', lastName: 'Owner' });
+      token = registered.token!;
+      userId = registered.userId!;
     });
 
     it('creates a task in the database', async () => {
       const res = await request(app)
         .post(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Integration task', priority: 'HIGH' });
+        .set(authHeader(token))
+        .send({
+          title: 'Integration task',
+          description: 'Details',
+          priority: 'HIGH',
+          dueDate: '2026-12-31T00:00:00.000Z',
+        });
 
       expect(res.status).toBe(201);
       expect(res.body.data.title).toBe('Integration task');
+      expect(res.body.data.priority).toBe('HIGH');
 
       const row = await prisma.task.findUnique({ where: { id: res.body.data.id } });
       expect(row).not.toBeNull();
       expect(row!.createdById).toBe(userId);
       expect(row!.status).toBe('TODO');
+      expect(row!.description).toBe('Details');
     });
 
-    it('lists only the owner tasks and updates status', async () => {
+    it('gets a task by id for the owner', async () => {
       const created = await request(app)
         .post(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Status task' });
+        .set(authHeader(token))
+        .send({ title: 'Fetch me' });
 
+      const res = await request(app)
+        .get(`${API}/tasks/${created.body.data.id}`)
+        .set(authHeader(token));
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.title).toBe('Fetch me');
+    });
+
+    it('returns 404 for missing task', async () => {
+      const res = await request(app)
+        .get(`${API}/tasks/00000000-0000-4000-8000-000000000000`)
+        .set(authHeader(token));
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('lists only the owner tasks and updates fields', async () => {
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Status task' });
       const taskId = created.body.data.id;
 
-      const list = await request(app)
-        .get(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`);
-
+      const list = await request(app).get(`${API}/tasks`).set(authHeader(token));
       expect(list.status).toBe(200);
       expect(list.body.data).toHaveLength(1);
+      expect(list.body.meta.total).toBe(1);
 
       const updated = await request(app)
         .put(`${API}/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ status: 'IN_PROGRESS' });
+        .set(authHeader(token))
+        .send({
+          title: 'Renamed task',
+          status: 'IN_PROGRESS',
+          priority: 'URGENT',
+          description: 'Updated desc',
+        });
 
       expect(updated.status).toBe(200);
+      expect(updated.body.data.title).toBe('Renamed task');
       expect(updated.body.data.status).toBe('IN_PROGRESS');
+      expect(updated.body.data.priority).toBe('URGENT');
 
       const row = await prisma.task.findUnique({ where: { id: taskId } });
       expect(row!.status).toBe('IN_PROGRESS');
+      expect(row!.title).toBe('Renamed task');
+    });
+
+    it('filters tasks by status and search', async () => {
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Alpha todo', status: 'TODO' });
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Beta progress', status: 'IN_PROGRESS' });
+
+      const byStatus = await request(app)
+        .get(`${API}/tasks`)
+        .query({ status: 'IN_PROGRESS' })
+        .set(authHeader(token));
+      expect(byStatus.status).toBe(200);
+      expect(byStatus.body.data).toHaveLength(1);
+      expect(byStatus.body.data[0].title).toBe('Beta progress');
+
+      const bySearch = await request(app)
+        .get(`${API}/tasks`)
+        .query({ search: 'Alpha' })
+        .set(authHeader(token));
+      expect(bySearch.status).toBe(200);
+      expect(bySearch.body.data).toHaveLength(1);
+      expect(bySearch.body.data[0].title).toBe('Alpha todo');
+    });
+
+    it('rejects invalid status on create', async () => {
+      const res = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({ title: 'Bad status', status: 'NOT_A_STATUS' });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
     });
 
     it('deletes a task from the database', async () => {
       const created = await request(app)
         .post(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`)
+        .set(authHeader(token))
         .send({ title: 'Delete me' });
-
       const taskId = created.body.data.id;
 
       const del = await request(app)
         .delete(`${API}/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${token}`);
+        .set(authHeader(token));
 
       expect(del.status).toBe(200);
       expect(await prisma.task.findUnique({ where: { id: taskId } })).toBeNull();
@@ -198,7 +287,7 @@ describe('API + DB integration', () => {
     it('rejects create task without title', async () => {
       const res = await request(app)
         .post(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`)
+        .set(authHeader(token))
         .send({ description: 'no title' });
 
       expect(res.status).toBeGreaterThanOrEqual(400);
@@ -209,24 +298,44 @@ describe('API + DB integration', () => {
     it('forbids access to another users task', async () => {
       const created = await request(app)
         .post(`${API}/tasks`)
-        .set('Authorization', `Bearer ${token}`)
+        .set(authHeader(token))
         .send({ title: 'Private task' });
       const taskId = created.body.data.id;
 
-      const other = await request(app).post(`${API}/auth/register`).send({
-        email: `other_${Date.now()}@example.com`,
-        password,
-        firstName: 'Other',
-        lastName: 'User',
-      });
-      const otherToken = other.body.data.tokens.accessToken;
+      const other = await registerUser({ firstName: 'Other' });
+      const otherToken = other.token!;
 
-      const res = await request(app)
+      const getRes = await request(app)
         .get(`${API}/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${otherToken}`);
+        .set(authHeader(otherToken));
+      expect(getRes.status).toBe(403);
 
-      expect(res.status).toBe(403);
-      expect(res.body.success).toBe(false);
+      const putRes = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(otherToken))
+        .send({ title: 'Hijack' });
+      expect(putRes.status).toBe(403);
+
+      const delRes = await request(app)
+        .delete(`${API}/tasks/${taskId}`)
+        .set(authHeader(otherToken));
+      expect(delRes.status).toBe(403);
+
+      expect(await prisma.task.findUnique({ where: { id: taskId } })).not.toBeNull();
+    });
+  });
+
+  describe('Teams (deferred)', () => {
+    it('requires auth for teams base path', async () => {
+      const res = await request(app).get(`${API}/teams`);
+      expect(res.status).toBe(401);
+    });
+
+    it('has no implemented team handlers yet', async () => {
+      const { token } = await registerUser();
+      const res = await request(app).get(`${API}/teams`).set(authHeader(token!));
+      // Router mounts auth but no handlers → Express 404
+      expect(res.status).toBe(404);
     });
   });
 });
