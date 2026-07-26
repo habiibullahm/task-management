@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest, RegisterDto, LoginDto, RefreshTokenDto } from '../types';
 import authService from '../services/auth.service';
 import { ResponseUtil } from '../utils/response.util';
+import { AppError } from '../middleware/error.middleware';
 
 export class AuthController {
   /**
@@ -56,14 +57,12 @@ export class AuthController {
   async getProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       const user = await authService.getProfile(req.user.userId);
       if (!user) {
-        ResponseUtil.notFound(res, 'User not found');
-        return;
+        throw new AppError(404, 'User not found');
       }
 
       ResponseUtil.success(res, 'Profile retrieved successfully', user);

@@ -1,18 +1,18 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { JwtUtil } from '../utils/jwt.util';
-import { ResponseUtil } from '../utils/response.util';
+import { AppError } from './error.middleware';
 
 export class AuthMiddleware {
   /**
    * Verify JWT token and attach user to request
    */
-  public static authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
+  public static authenticate(req: AuthRequest, _res: Response, next: NextFunction): void {
     try {
       const authHeader = req.headers.authorization;
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        ResponseUtil.unauthorized(res, 'No token provided');
+        next(new AppError(401, 'No token provided'));
         return;
       }
 
@@ -22,13 +22,11 @@ export class AuthMiddleware {
         const payload = JwtUtil.verifyAccessToken(token);
         req.user = payload;
         next();
-      } catch (error) {
-        ResponseUtil.unauthorized(res, 'Invalid or expired token');
-        return;
+      } catch {
+        next(new AppError(401, 'Invalid or expired token'));
       }
-    } catch (error) {
-      ResponseUtil.serverError(res, 'Authentication error');
-      return;
+    } catch {
+      next(new AppError(500, 'Authentication error'));
     }
   }
 
@@ -36,14 +34,14 @@ export class AuthMiddleware {
    * Check if user has required role
    */
   public static authorize(...allowedRoles: string[]) {
-    return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    return (req: AuthRequest, _res: Response, next: NextFunction): void => {
       if (!req.user) {
-        ResponseUtil.unauthorized(res, 'User not authenticated');
+        next(new AppError(401, 'User not authenticated'));
         return;
       }
 
       if (!allowedRoles.includes(req.user.role)) {
-        ResponseUtil.forbidden(res, 'Insufficient permissions');
+        next(new AppError(403, 'Insufficient permissions'));
         return;
       }
 
@@ -63,13 +61,13 @@ export class AuthMiddleware {
         try {
           const payload = JwtUtil.verifyAccessToken(token);
           req.user = payload;
-        } catch (error) {
+        } catch {
           // Token invalid but continue anyway
         }
       }
 
       next();
-    } catch (error) {
+    } catch {
       next();
     }
   }

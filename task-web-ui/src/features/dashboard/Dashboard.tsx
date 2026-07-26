@@ -6,6 +6,17 @@ import { useTaskStore } from '@/stores/task.store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TaskStatus } from '@/types';
+import type { TaskStatus as TaskStatusType } from '@/types';
+
+const STATUS_META: Record<TaskStatusType, { title: string; description: string }> = {
+  [TaskStatus.TODO]: { title: 'To Do', description: 'Tasks waiting to start' },
+  [TaskStatus.IN_PROGRESS]: { title: 'In Progress', description: "Tasks you're working on" },
+  [TaskStatus.IN_REVIEW]: { title: 'In Review', description: 'Tasks awaiting review' },
+  [TaskStatus.DONE]: { title: 'Completed', description: "Tasks you've finished" },
+  [TaskStatus.CANCELLED]: { title: 'Cancelled', description: 'Tasks that were cancelled' },
+};
+
+const ALL_STATUSES = Object.values(TaskStatus);
 
 export function Dashboard() {
   const { user, logout } = useAuthStore();
@@ -17,10 +28,15 @@ export function Dashboard() {
   }, [fetchTasks]);
 
   const stats = useMemo(() => {
+    const byStatus = ALL_STATUSES.reduce(
+      (acc, status) => {
+        acc[status] = tasks.filter((t) => t.status === status).length;
+        return acc;
+      },
+      {} as Record<TaskStatusType, number>,
+    );
     const total = tasks.length;
-    const inProgress = tasks.filter((t) => t.status === TaskStatus.IN_PROGRESS).length;
-    const completed = tasks.filter((t) => t.status === TaskStatus.DONE).length;
-    return { total, inProgress, completed };
+    return { total, byStatus };
   }, [tasks]);
 
   const handleLogout = async () => {
@@ -50,7 +66,7 @@ export function Dashboard() {
           <p className="text-muted-foreground">Here's what's happening with your tasks today.</p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle>Total Tasks</CardTitle>
@@ -61,25 +77,22 @@ export function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>In Progress</CardTitle>
-              <CardDescription>Tasks you're working on</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold">{isLoading ? '…' : stats.inProgress}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Completed</CardTitle>
-              <CardDescription>Tasks you've finished</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold">{isLoading ? '…' : stats.completed}</p>
-            </CardContent>
-          </Card>
+          {ALL_STATUSES.map((status) => {
+            const meta = STATUS_META[status];
+            return (
+              <Card key={status}>
+                <CardHeader>
+                  <CardTitle>{meta.title}</CardTitle>
+                  <CardDescription>{meta.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-4xl font-bold">
+                    {isLoading ? '…' : stats.byStatus[status]}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         <div className="mt-8">
@@ -88,12 +101,15 @@ export function Dashboard() {
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Get started with these common tasks</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-4">
-              <Button onClick={() => navigate('/tasks/new')}>Create Task</Button>
-              <Button variant="outline" onClick={() => navigate('/tasks')}>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Button className="w-full" onClick={() => navigate('/tasks/new')}>
+                Create Task
+              </Button>
+              <Button className="w-full" variant="outline" onClick={() => navigate('/tasks')}>
                 My Tasks
               </Button>
               <Button
+                className="w-full sm:col-span-2 lg:col-span-1"
                 variant="outline"
                 onClick={() => toast.message('Teams coming in a later release')}
               >

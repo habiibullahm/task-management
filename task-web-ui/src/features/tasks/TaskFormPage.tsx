@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useTaskStore } from '@/stores/task.store';
+import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Priority, TaskStatus } from '@/types';
 import type { Priority as PriorityType, TaskStatus as TaskStatusType } from '@/types';
+import { formatPriority, formatTaskStatus } from './task-labels';
 
 interface TaskFormState {
   title: string;
@@ -84,7 +86,7 @@ export function TaskFormPage() {
       }
       navigate('/tasks');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save task');
+      toast.error(handleApiError(error, 'Failed to save task'));
     } finally {
       setSaving(false);
     }
@@ -153,7 +155,7 @@ export function TaskFormPage() {
                       >
                         {Object.values(TaskStatus).map((status) => (
                           <option key={status} value={status}>
-                            {status.replace('_', ' ')}
+                            {formatTaskStatus(status)}
                           </option>
                         ))}
                       </select>
@@ -170,7 +172,7 @@ export function TaskFormPage() {
                       >
                         {Object.values(Priority).map((priority) => (
                           <option key={priority} value={priority}>
-                            {priority}
+                            {formatPriority(priority)}
                           </option>
                         ))}
                       </select>

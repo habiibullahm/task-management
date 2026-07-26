@@ -53,17 +53,32 @@ test.describe('Auth', () => {
 test.describe('Dashboard', () => {
   test('shows task stats and quick actions', async ({ page }) => {
     await registerViaUi(page, { firstName: 'Dash' });
-    await createTaskViaUi(page, { title: 'Stat task', status: 'IN_PROGRESS' });
+    await createTaskViaUi(page, { title: 'Stat todo', status: 'TODO' });
+    await createTaskViaUi(page, { title: 'Stat progress', status: 'IN_PROGRESS' });
+    await createTaskViaUi(page, { title: 'Stat review', status: 'IN_REVIEW' });
 
     await page.goto('/dashboard');
     await expect(page.getByText(/welcome back, dash/i)).toBeVisible();
     await expect(page.getByText('Total Tasks')).toBeVisible();
+    await expect(page.getByText('To Do', { exact: true })).toBeVisible();
+    await expect(page.getByText('In Progress', { exact: true })).toBeVisible();
+    await expect(page.getByText('In Review', { exact: true })).toBeVisible();
+    await expect(page.getByText('Completed', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create Task' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'My Tasks' })).toBeVisible();
 
-    // Stats cards render total / in-progress counts from fetched tasks
-    await expect(page.locator('p.text-4xl.font-bold').first()).toHaveText('1', { timeout: 10_000 });
-    await expect(page.locator('p.text-4xl.font-bold').nth(1)).toHaveText('1');
+    const statValues = page.locator('p.text-4xl.font-bold');
+    // Total + one card per TaskStatus (TODO, IN_PROGRESS, IN_REVIEW, DONE, CANCELLED)
+    await expect(statValues).toHaveCount(6);
+    await expect(statValues.first()).toHaveText('3', { timeout: 10_000 });
+
+    const statusCounts = await Promise.all(
+      [1, 2, 3, 4, 5].map(async (i) => Number(await statValues.nth(i).innerText())),
+    );
+    expect(statusCounts.reduce((sum, n) => sum + n, 0)).toBe(3);
+    expect(statusCounts[0]).toBe(1); // To Do
+    expect(statusCounts[1]).toBe(1); // In Progress
+    expect(statusCounts[2]).toBe(1); // In Review
 
     await page.getByRole('button', { name: 'My Tasks' }).click();
     await expect(page).toHaveURL(/\/tasks$/);
@@ -83,7 +98,7 @@ test.describe('Tasks', () => {
       priority: 'HIGH',
     });
     await expect(page.getByText('E2E live task')).toBeVisible();
-    await expect(page.getByText(/priority: high/i)).toBeVisible();
+    await expect(page.getByText('High', { exact: true })).toBeVisible();
   });
 
   test('edit task title and details', async ({ page }) => {
@@ -113,7 +128,7 @@ test.describe('Tasks', () => {
 
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByText('Edited task title')).toBeVisible();
-    await expect(page.getByText(/priority: low/i)).toBeVisible();
+    await expect(page.getByText('Low', { exact: true })).toBeVisible();
   });
 
   test('change status from task list', async ({ page }) => {
@@ -145,8 +160,7 @@ test.describe('Tasks', () => {
 
     await page.getByRole('button', { name: 'All', exact: true }).click();
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
-    await page.getByRole('button', { name: 'Search' }).click();
-    await expect(page.getByText('Alpha filter')).toBeVisible();
+    await expect(page.getByText('Alpha filter')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Beta filter')).toHaveCount(0);
   });
 
