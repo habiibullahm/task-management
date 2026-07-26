@@ -8,6 +8,7 @@ export interface TaskListParams {
   search?: string;
   page?: number;
   limit?: number;
+  sort?: 'dueDate' | 'updatedAt';
 }
 
 const userSelect = {
@@ -69,12 +70,17 @@ export class TaskRepository {
       ],
     };
 
+    const orderBy: Prisma.TaskOrderByWithRelationInput =
+      params.sort === 'dueDate'
+        ? { dueDate: { sort: 'asc', nulls: 'last' } }
+        : { updatedAt: 'desc' };
+
     const [tasks, total] = await Promise.all([
       prisma.task.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { updatedAt: 'desc' },
+        orderBy,
         include: {
           createdBy: { select: userSelect },
           assignedTo: { select: userSelect },

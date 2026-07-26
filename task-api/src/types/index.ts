@@ -23,6 +23,20 @@ export interface RefreshTokenDto {
   refreshToken: string;
 }
 
+export interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ForgotPasswordDto {
+  email: string;
+}
+
+export interface ResetPasswordDto {
+  token: string;
+  newPassword: string;
+}
+
 // Task DTOs
 export interface CreateTaskDto {
   title: string;
@@ -75,6 +89,7 @@ export interface TaskFilterParams extends PaginationParams {
   teamId?: string;
   createdById?: string;
   search?: string;
+  sort?: 'dueDate' | 'updatedAt';
 }
 
 export interface TeamFilterParams extends PaginationParams {

@@ -12,7 +12,16 @@ if (!fs.existsSync(indexHtml)) {
   process.exit(1);
 }
 
-const routes = ['login', 'register', 'dashboard', 'tasks', path.join('tasks', 'new')];
+const routes = [
+  'login',
+  'register',
+  'forgot-password',
+  'reset-password',
+  'settings',
+  'dashboard',
+  'tasks',
+  path.join('tasks', 'new'),
+];
 
 for (const route of routes) {
   const dir = path.join(dist, route);

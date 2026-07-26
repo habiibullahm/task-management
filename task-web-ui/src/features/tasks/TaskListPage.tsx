@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { TaskStatus } from '@/types';
-import { TaskStatus as Status } from '@/types';
+import type { Priority, TaskStatus } from '@/types';
+import { Priority as PriorityEnum, TaskStatus as Status } from '@/types';
 import { formatPriority, formatTaskStatus, priorityBadgeClass } from './task-labels';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -21,17 +21,42 @@ const STATUS_FILTERS: Array<{ label: string; value?: TaskStatus }> = [
   { label: 'In Progress', value: Status.IN_PROGRESS },
   { label: 'In Review', value: Status.IN_REVIEW },
   { label: 'Done', value: Status.DONE },
+  { label: 'Cancelled', value: Status.CANCELLED },
+];
+
+const PRIORITY_FILTERS: Array<{ label: string; value?: Priority }> = [
+  { label: 'All priorities', value: undefined },
+  { label: 'Low priority', value: PriorityEnum.LOW },
+  { label: 'Medium priority', value: PriorityEnum.MEDIUM },
+  { label: 'High priority', value: PriorityEnum.HIGH },
+  { label: 'Urgent priority', value: PriorityEnum.URGENT },
 ];
 
 export function TaskListPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout } = useAuthStore();
-  const { tasks, isLoading, fetchTasks, deleteTask, updateTaskStatus, setFilters, filters } = useTaskStore();
+  const { tasks, isLoading, deleteTask, updateTaskStatus, setFilters, filters } = useTaskStore();
   const [search, setSearch] = useState(filters.search ?? '');
 
   useEffect(() => {
-    fetchTasks({ limit: 50 });
-  }, [fetchTasks]);
+    const statusParam = searchParams.get('status') as TaskStatus | null;
+    const priorityParam = searchParams.get('priority') as Priority | null;
+    const sortParam = searchParams.get('sort') as 'dueDate' | 'updatedAt' | null;
+    const next = {
+      status: statusParam && Object.values(Status).includes(statusParam) ? statusParam : undefined,
+      priority:
+        priorityParam && Object.values(PriorityEnum).includes(priorityParam)
+          ? priorityParam
+          : undefined,
+      sort: sortParam === 'dueDate' || sortParam === 'updatedAt' ? sortParam : undefined,
+      search: useTaskStore.getState().filters.search,
+      limit: 50,
+    };
+    setFilters(next);
+    // Sync list from URL query
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     const trimmed = search.trim();
@@ -51,8 +76,50 @@ export function TaskListPage() {
     navigate('/login');
   };
 
+  const syncUrl = (next: {
+    status?: TaskStatus;
+    priority?: Priority;
+    sort?: 'dueDate' | 'updatedAt';
+  }) => {
+    const params = new URLSearchParams();
+    if (next.status) params.set('status', next.status);
+    if (next.priority) params.set('priority', next.priority);
+    if (next.sort) params.set('sort', next.sort);
+    setSearchParams(params, { replace: true });
+  };
+
   const handleStatusFilter = (status?: TaskStatus) => {
-    setFilters({ ...filters, status, search: search.trim() || undefined, limit: 50 });
+    const next = {
+      ...filters,
+      status,
+      search: search.trim() || undefined,
+      limit: 50 as const,
+    };
+    setFilters(next);
+    syncUrl({ status, priority: filters.priority, sort: filters.sort });
+  };
+
+  const handlePriorityFilter = (priority?: Priority) => {
+    const next = {
+      ...filters,
+      priority,
+      search: search.trim() || undefined,
+      limit: 50 as const,
+    };
+    setFilters(next);
+    syncUrl({ status: filters.status, priority, sort: filters.sort });
+  };
+
+  const handleSort = (sort?: 'dueDate' | 'updatedAt') => {
+    const next = { ...filters, sort, search: search.trim() || undefined, limit: 50 as const };
+    setFilters(next);
+    syncUrl({ status: filters.status, priority: filters.priority, sort });
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilters({ limit: 50 });
+    setSearchParams({}, { replace: true });
   };
 
   const handleDelete = async (id: string) => {
@@ -74,6 +141,7 @@ export function TaskListPage() {
     }
   };
 
+  const hasActiveFilters = Boolean(filters.status || filters.priority || filters.search || filters.sort);
   const empty = useMemo(() => !isLoading && tasks.length === 0, [isLoading, tasks.length]);
 
   return (
@@ -90,6 +158,9 @@ export function TaskListPage() {
             <span className="text-sm text-muted-foreground">
               {user?.firstName} {user?.lastName}
             </span>
+            <Button variant="outline" onClick={() => navigate('/settings')}>
+              Settings
+            </Button>
             <Button variant="outline" onClick={handleLogout}>
               Logout
             </Button>
@@ -126,11 +197,39 @@ export function TaskListPage() {
                 </Button>
               ))}
             </div>
+            <div className="flex flex-wrap gap-2">
+              {PRIORITY_FILTERS.map((filter) => (
+                <Button
+                  key={filter.label}
+                  size="sm"
+                  variant={filters.priority === filter.value ? 'default' : 'outline'}
+                  onClick={() => handlePriorityFilter(filter.value)}
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={!filters.sort || filters.sort === 'updatedAt' ? 'default' : 'outline'}
+                onClick={() => handleSort('updatedAt')}
+              >
+                Recently updated
+              </Button>
+              <Button
+                size="sm"
+                variant={filters.sort === 'dueDate' ? 'default' : 'outline'}
+                onClick={() => handleSort('dueDate')}
+              >
+                Due date
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         {isLoading && <p className="text-muted-foreground">Loading tasks...</p>}
-        {empty && (
+        {empty && !hasActiveFilters && (
           <Card>
             <CardHeader>
               <CardTitle>No tasks yet</CardTitle>
@@ -138,6 +237,19 @@ export function TaskListPage() {
             </CardHeader>
             <CardContent>
               <Button onClick={() => navigate('/tasks/new')}>Create Task</Button>
+            </CardContent>
+          </Card>
+        )}
+        {empty && hasActiveFilters && (
+          <Card>
+            <CardHeader>
+              <CardTitle>No tasks match</CardTitle>
+              <CardDescription>Try clearing filters or adjusting your search.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={clearFilters}>
+                Clear filters
+              </Button>
             </CardContent>
           </Card>
         )}

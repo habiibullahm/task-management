@@ -25,6 +25,24 @@ const refreshTokenValidation = [
   body('refreshToken').notEmpty().withMessage('Refresh token is required'),
 ];
 
+const changePasswordValidation = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters long'),
+];
+
+const forgotPasswordValidation = [
+  body('email').isEmail().withMessage('Valid email is required'),
+];
+
+const resetPasswordValidation = [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters long'),
+];
+
 // Routes
 router.post(
   '/register',
@@ -54,6 +72,25 @@ router.post(
   '/logout',
   AuthMiddleware.authenticate,
   authController.logout.bind(authController)
+);
+
+router.post(
+  '/change-password',
+  AuthMiddleware.authenticate,
+  ValidationMiddleware.validate(changePasswordValidation),
+  authController.changePassword.bind(authController)
+);
+
+router.post(
+  '/forgot-password',
+  ValidationMiddleware.validate(forgotPasswordValidation),
+  authController.forgotPassword.bind(authController)
+);
+
+router.post(
+  '/reset-password',
+  ValidationMiddleware.validate(resetPasswordValidation),
+  authController.resetPassword.bind(authController)
 );
 
 export default router;
