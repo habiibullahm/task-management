@@ -14,9 +14,20 @@
 2. Render Dashboard → **New** → **Blueprint** → connect the repo (deploy from `main`).
 3. Set required env vars when prompted:
    - **API `CORS_ORIGIN`**: `https://<your-ui-service>.onrender.com`
+   - **API `APP_URL`** (optional, password-reset links): same as UI URL
+   - **API `RESEND_API_KEY`** / `EMAIL_FROM` (optional): enable real reset emails
    - **UI `VITE_API_BASE_URL`**: `https://<your-api-service>.onrender.com/api/v1`
 4. Deploy. After API URL is known, update UI env and **redeploy UI** so Vite bakes the API URL into the static build.
-5. Smoke test: register → Create Task → My Tasks → change status → edit → delete.
+5. Smoke test: register → Create Task → My Tasks → change status → edit → delete → Settings (change password) → Forgot password (optional).
+
+## Seed demo tasks (optional)
+
+From `task-api`, against any database (local or Render external URL — do not commit secrets):
+
+```bash
+DATABASE_URL="postgresql://..." SEED_EMAIL="you@example.com" npm run seed:demo
+# optional: SEED_REPLACE=true to replace prior demo titles for that user
+```
 
 ## API service settings (required)
 

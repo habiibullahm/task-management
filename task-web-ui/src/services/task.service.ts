@@ -27,6 +27,7 @@ export interface TaskFilters {
   assignedToId?: string;
   teamId?: string;
   search?: string;
+  sort?: 'dueDate' | 'updatedAt';
   page?: number;
   limit?: number;
 }

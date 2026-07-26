@@ -9,6 +9,7 @@ export interface ListTasksQuery {
   search?: string;
   page?: number;
   limit?: number;
+  sort?: string;
 }
 
 const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE', 'CANCELLED'];
@@ -30,6 +31,12 @@ function parsePriority(value?: string): Priority | undefined {
   return value as Priority;
 }
 
+function parseSort(value?: string): 'dueDate' | 'updatedAt' | undefined {
+  if (!value) return undefined;
+  if (value === 'dueDate' || value === 'updatedAt') return value;
+  throw new AppError(400, 'Invalid sort. Allowed: dueDate, updatedAt');
+}
+
 export class TaskService {
   async list(userId: string, query: ListTasksQuery): Promise<{
     tasks: Task[];
@@ -45,6 +52,7 @@ export class TaskService {
       search: query.search?.trim() || undefined,
       page,
       limit,
+      sort: parseSort(query.sort),
     });
 
     return {

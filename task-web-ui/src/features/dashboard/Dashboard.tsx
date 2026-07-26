@@ -53,6 +53,9 @@ export function Dashboard() {
             <span className="text-sm text-muted-foreground">
               {user?.firstName} {user?.lastName}
             </span>
+            <Button variant="outline" onClick={() => navigate('/settings')}>
+              Settings
+            </Button>
             <Button variant="outline" onClick={handleLogout}>
               Logout
             </Button>
@@ -80,7 +83,11 @@ export function Dashboard() {
           {ALL_STATUSES.map((status) => {
             const meta = STATUS_META[status];
             return (
-              <Card key={status}>
+              <Card
+                key={status}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+                onClick={() => navigate(`/tasks?status=${status}`)}
+              >
                 <CardHeader>
                   <CardTitle>{meta.title}</CardTitle>
                   <CardDescription>{meta.description}</CardDescription>
@@ -101,12 +108,15 @@ export function Dashboard() {
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Get started with these common tasks</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Button className="w-full" onClick={() => navigate('/tasks/new')}>
                 Create Task
               </Button>
               <Button className="w-full" variant="outline" onClick={() => navigate('/tasks')}>
                 My Tasks
+              </Button>
+              <Button className="w-full" variant="outline" onClick={() => navigate('/settings')}>
+                Settings
               </Button>
               <Button
                 className="w-full sm:col-span-2 lg:col-span-1"

@@ -25,14 +25,30 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  createdTasks     Task[]           @relation("TaskCreator")
-  assignedTasks    Task[]           @relation("TaskAssignee")
-  teamMemberships  TeamMember[]
-  createdTeams     Team[]           @relation("TeamCreator")
-  comments         Comment[]
-  activityLogs     ActivityLog[]
+  createdTasks         Task[]               @relation("TaskCreator")
+  assignedTasks        Task[]               @relation("TaskAssignee")
+  teamMemberships      TeamMember[]
+  createdTeams         Team[]               @relation("TeamCreator")
+  comments             Comment[]
+  activityLogs         ActivityLog[]
+  passwordResetTokens  PasswordResetToken[]
 
   @@map("users")
+}
+
+// Single-use password reset tokens (store hash only)
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // Team model for organizing users into groups
