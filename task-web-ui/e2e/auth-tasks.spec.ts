@@ -29,6 +29,30 @@ test.describe('Auth', () => {
     await expect(page).toHaveURL(/login/);
   });
 
+  test('forgot and reset password flow', async ({ page, request }) => {
+    const { email } = await registerViaUi(page);
+    await page.getByRole('button', { name: 'Logout' }).click();
+
+    const forgotApi = await request.post(`${process.env.PLAYWRIGHT_API_URL || 'http://127.0.0.1:3001'}/api/v1/auth/forgot-password`, {
+      data: { email },
+    });
+    expect(forgotApi.ok()).toBeTruthy();
+    const forgotBody = await forgotApi.json();
+    const resetToken = forgotBody.data?.resetToken as string;
+    expect(resetToken).toBeTruthy();
+
+    const newPassword = 'E2EResetPass123!@#';
+    await page.goto(`/reset-password?token=${encodeURIComponent(resetToken)}`);
+    await page.getByLabel('New password').fill(newPassword);
+    await page.getByLabel('Confirm password').fill(newPassword);
+    await page.getByRole('button', { name: 'Reset password', exact: true }).click();
+    await expect(page).toHaveURL(/login/);
+
+    const loginRes = await loginViaUi(page, email, newPassword);
+    expect(loginRes.status()).toBe(200);
+    await expect(page).toHaveURL(/dashboard/);
+  });
+
   test('protected routes redirect unauthenticated users to login', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/login/);
@@ -98,7 +122,9 @@ test.describe('Tasks', () => {
       priority: 'HIGH',
     });
     await expect(page.getByText('E2E live task')).toBeVisible();
-    await expect(page.getByText('High', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('div').filter({ hasText: 'E2E live task' }).getByText('High', { exact: true })
+    ).toBeVisible();
   });
 
   test('edit task title and details', async ({ page }) => {
@@ -128,7 +154,9 @@ test.describe('Tasks', () => {
 
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByText('Edited task title')).toBeVisible();
-    await expect(page.getByText('Low', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('div').filter({ hasText: 'Edited task title' }).getByText('Low', { exact: true })
+    ).toBeVisible();
   });
 
   test('change status from task list', async ({ page }) => {
@@ -162,6 +190,16 @@ test.describe('Tasks', () => {
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
     await expect(page.getByText('Alpha filter')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Beta filter')).toHaveCount(0);
+  });
+
+  test('priority filter and no-match empty state', async ({ page }) => {
+    await registerViaUi(page);
+    await createTaskViaUi(page, { title: 'Low priority only', priority: 'LOW' });
+
+    await page.getByRole('button', { name: 'Urgent priority', exact: true }).click();
+    await expect(page.getByText('No tasks match')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+    await expect(page.getByText('Low priority only')).toBeVisible();
   });
 
   test('delete task after confirm', async ({ page }) => {

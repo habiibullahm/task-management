@@ -57,6 +57,39 @@ export const authService = {
     throw new Error(response.data.message || 'Token refresh failed');
   },
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const response = await apiClient.post<ApiResponse>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Unable to change password');
+    }
+  },
+
+  async forgotPassword(email: string): Promise<{ message: string; resetToken?: string }> {
+    const response = await apiClient.post<ApiResponse<{ resetToken?: string }>>('/auth/forgot-password', {
+      email,
+    });
+    if (response.data.success) {
+      return {
+        message: response.data.message,
+        resetToken: response.data.data?.resetToken,
+      };
+    }
+    throw new Error(response.data.message || 'Unable to process password reset');
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const response = await apiClient.post<ApiResponse>('/auth/reset-password', {
+      token,
+      newPassword,
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Unable to reset password');
+    }
+  },
+
   // Check if user is authenticated
   isAuthenticated(): boolean {
     return !!localStorage.getItem('accessToken');

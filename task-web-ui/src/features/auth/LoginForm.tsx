@@ -74,13 +74,9 @@ export function LoginForm() {
                   type="button"
                   variant="link"
                   className="h-auto p-0 text-sm font-normal"
-                  onClick={() =>
-                    toast.info(
-                      'Password reset is not available yet. Double-check your password, or create a new account if you have not registered.'
-                    )
-                  }
+                  asChild
                 >
-                  Forgot password?
+                  <Link to="/forgot-password">Forgot password?</Link>
                 </Button>
               </div>
               <div className="relative">
