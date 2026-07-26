@@ -16,6 +16,7 @@ A simple personal task manager you can open in the browser: sign up, capture wor
 **Not for (yet):** team boards, shared workspaces, or heavy project planning — those are deferred.
 
 **v1 includes:** JWT register/login, personal task CRUD + status, dashboard stats from your tasks.  
+**Week 2 harden:** change password, forgot/reset password, richer task filters/empty states, DB health ping.  
 **Coming later:** Teams UI.
 
 Built as a full-stack training / portfolio app to practice real product flow: auth, CRUD, Postgres, CI, and cloud deploy — while still solving a concrete user need.

@@ -1,5 +1,13 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest, RegisterDto, LoginDto, RefreshTokenDto } from '../types';
+import {
+  AuthRequest,
+  RegisterDto,
+  LoginDto,
+  RefreshTokenDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from '../types';
 import authService from '../services/auth.service';
 import { ResponseUtil } from '../utils/response.util';
 import { AppError } from '../middleware/error.middleware';
@@ -77,11 +85,56 @@ export class AuthController {
    */
   async logout(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      // In a JWT-based system, logout is typically handled client-side
-      // by removing the token. This endpoint can be used for logging purposes
-      // or for token blacklisting if implemented.
-
       ResponseUtil.success(res, 'Logout successful');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Change password (authenticated)
+   * POST /api/v1/auth/change-password
+   */
+  async changePassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, 'Unauthorized');
+      }
+
+      const { currentPassword, newPassword }: ChangePasswordDto = req.body;
+      await authService.changePassword(req.user.userId, currentPassword, newPassword);
+
+      ResponseUtil.success(res, 'Password changed successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Forgot password
+   * POST /api/v1/auth/forgot-password
+   */
+  async forgotPassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email }: ForgotPasswordDto = req.body;
+      const result = await authService.forgotPassword(email);
+
+      ResponseUtil.success(res, result.message, result.resetToken ? { resetToken: result.resetToken } : undefined);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Reset password with token
+   * POST /api/v1/auth/reset-password
+   */
+  async resetPassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { token, newPassword }: ResetPasswordDto = req.body;
+      await authService.resetPassword(token, newPassword);
+
+      ResponseUtil.success(res, 'Password reset successfully');
     } catch (error) {
       next(error);
     }

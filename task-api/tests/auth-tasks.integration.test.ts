@@ -31,6 +31,7 @@ describe('API + DB integration', () => {
       const res = await request(app).get(`${API}/health`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.data.db).toBe('ok');
     });
   });
 
@@ -121,11 +122,90 @@ describe('API + DB integration', () => {
       const res = await request(app)
         .post(`${API}/auth/refresh`)
         .send({ refreshToken: 'not-a-valid-token' });
-
-      expect(res.status).toBeGreaterThanOrEqual(400);
-      expect(res.body.success).toBe(false);
+      expect(res.status).toBe(401);
     });
 
+    it('changes password when current password is correct', async () => {
+      const { token, email, password } = await registerUser({ firstName: 'Change' });
+      const newPassword = 'NewSecurePass123!@#';
+
+      const changeRes = await request(app)
+        .post(`${API}/auth/change-password`)
+        .set(authHeader(token!))
+        .send({ currentPassword: password, newPassword });
+      expect(changeRes.status).toBe(200);
+
+      const oldLogin = await request(app).post(`${API}/auth/login`).send({ email, password });
+      expect(oldLogin.status).toBe(401);
+
+      const newLogin = await request(app)
+        .post(`${API}/auth/login`)
+        .send({ email, password: newPassword });
+      expect(newLogin.status).toBe(200);
+    });
+
+    it('rejects change-password with wrong current password', async () => {
+      const { token } = await registerUser({ firstName: 'WrongCurrent' });
+      const res = await request(app)
+        .post(`${API}/auth/change-password`)
+        .set(authHeader(token!))
+        .send({ currentPassword: 'WrongPass1!@#', newPassword: 'NewSecurePass123!@#' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/current password/i);
+    });
+
+    it('forgot-password is generic and reset-password updates credentials', async () => {
+      const { email } = await registerUser({ firstName: 'Reset' });
+      const forgotUnknown = await request(app)
+        .post(`${API}/auth/forgot-password`)
+        .send({ email: 'nobody_exists@example.com' });
+      expect(forgotUnknown.status).toBe(200);
+      expect(forgotUnknown.body.message).toMatch(/if an account exists/i);
+
+      const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+      expect(forgot.status).toBe(200);
+      expect(forgot.body.message).toMatch(/if an account exists/i);
+      const resetToken = forgot.body.data?.resetToken as string;
+      expect(resetToken).toBeTruthy();
+
+      const newPassword = 'ResetSecurePass123!@#';
+      const resetRes = await request(app)
+        .post(`${API}/auth/reset-password`)
+        .send({ token: resetToken, newPassword });
+      expect(resetRes.status).toBe(200);
+
+      const loginRes = await request(app)
+        .post(`${API}/auth/login`)
+        .send({ email, password: newPassword });
+      expect(loginRes.status).toBe(200);
+
+      const reuse = await request(app)
+        .post(`${API}/auth/reset-password`)
+        .send({ token: resetToken, newPassword: 'AnotherSecurePass123!@#' });
+      expect(reuse.status).toBe(400);
+    });
+
+    it('lists tasks sorted by dueDate when requested', async () => {
+      const { token } = await registerUser({ firstName: 'Sort' });
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token!))
+        .send({ title: 'Later due', dueDate: '2030-12-01' });
+      await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token!))
+        .send({ title: 'Sooner due', dueDate: '2030-01-01' });
+
+      const res = await request(app)
+        .get(`${API}/tasks?sort=dueDate&limit=50`)
+        .set(authHeader(token!));
+      expect(res.status).toBe(200);
+      const titles = (res.body.data as Array<{ title: string }>).map((t) => t.title);
+      expect(titles.indexOf('Sooner due')).toBeLessThan(titles.indexOf('Later due'));
+    });
+  });
+
+  describe('Auth logout', () => {
     it('logs out when authenticated', async () => {
       const { token } = await registerUser();
       const res = await request(app).post(`${API}/auth/logout`).set(authHeader(token!));
