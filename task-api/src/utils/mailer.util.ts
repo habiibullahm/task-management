@@ -1,22 +1,27 @@
+import nodemailer from 'nodemailer';
 import env from '../config/env';
 
+type SendResult = { sent: boolean; error?: string };
+
 /**
- * Password-reset email via Resend when RESEND_API_KEY is set.
- * Without a key, returns false so callers can log the link in development.
+ * Password-reset email.
+ * Prefer SMTP (Gmail App Password / any SMTP) when SMTP_* is set;
+ * otherwise use Resend when RESEND_API_KEY is set.
  */
 export class MailerUtil {
   public static isConfigured(): boolean {
-    return Boolean(process.env.RESEND_API_KEY?.trim());
+    return this.hasSmtp() || Boolean(process.env.RESEND_API_KEY?.trim());
   }
 
-  public static async sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return false;
-    }
+  private static hasSmtp(): boolean {
+    return Boolean(
+      process.env.SMTP_HOST?.trim() &&
+        process.env.SMTP_USER?.trim() &&
+        process.env.SMTP_PASS?.trim()
+    );
+  }
 
-    const from = process.env.EMAIL_FROM?.trim() || 'Task Management <onboarding@resend.dev>';
-
+  private static buildBodies(resetUrl: string): { text: string; html: string } {
     const text = [
       'Reset your Task Management password',
       '',
@@ -43,6 +48,51 @@ export class MailerUtil {
   </body>
 </html>`.trim();
 
+    return { text, html };
+  }
+
+  private static async sendViaSmtp(to: string, resetUrl: string): Promise<SendResult> {
+    const host = process.env.SMTP_HOST!.trim();
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = process.env.SMTP_USER!.trim();
+    const pass = process.env.SMTP_PASS!.trim();
+    const from = process.env.EMAIL_FROM?.trim() || user;
+    const { text, html } = this.buildBodies(resetUrl);
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      });
+
+      await transporter.sendMail({
+        from,
+        to,
+        subject: 'Reset your Task Management password',
+        text,
+        html,
+      });
+      return { sent: true };
+    } catch (error) {
+      console.error('Mailer: SMTP send failed', error);
+      return {
+        sent: false,
+        error: error instanceof Error ? error.message : 'SMTP send failed',
+      };
+    }
+  }
+
+  private static async sendViaResend(to: string, resetUrl: string): Promise<SendResult> {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
+      return { sent: false, error: 'RESEND_API_KEY is not set' };
+    }
+
+    const from = process.env.EMAIL_FROM?.trim() || 'onboarding@resend.dev';
+    const { text, html } = this.buildBodies(resetUrl);
+
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -60,14 +110,32 @@ export class MailerUtil {
       });
 
       if (!response.ok) {
-        console.error('Mailer: Resend request failed', response.status, await response.text());
-        return false;
+        const body = await response.text();
+        console.error('Mailer: Resend request failed', response.status, body);
+        let message = `Resend HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(body) as { message?: string };
+          if (parsed.message) message = parsed.message;
+        } catch {
+          /* keep default */
+        }
+        return { sent: false, error: message };
       }
-      return true;
+      return { sent: true };
     } catch (error) {
-      console.error('Mailer: failed to send reset email', error);
-      return false;
+      console.error('Mailer: Resend send failed', error);
+      return { sent: false, error: error instanceof Error ? error.message : 'send failed' };
     }
+  }
+
+  public static async sendPasswordResetEmail(to: string, resetUrl: string): Promise<SendResult> {
+    if (this.hasSmtp()) {
+      return this.sendViaSmtp(to, resetUrl);
+    }
+    if (process.env.RESEND_API_KEY?.trim()) {
+      return this.sendViaResend(to, resetUrl);
+    }
+    return { sent: false, error: 'No mailer configured (set SMTP_* or RESEND_API_KEY)' };
   }
 
   public static buildResetUrl(rawToken: string): string {

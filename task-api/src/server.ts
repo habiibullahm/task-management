@@ -10,7 +10,7 @@ async function startServer() {
     await Database.connect();
 
     // Start server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -25,6 +25,17 @@ async function startServer() {
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
       `);
+    });
+
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(
+          `Port ${PORT} is already in use. Run "npm run free-port" then start again, or stop the other process.`
+        );
+        process.exit(1);
+      }
+      console.error('Failed to start server:', error);
+      process.exit(1);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -47,4 +58,3 @@ process.on('SIGINT', async () => {
 
 // Start the server
 startServer();
-
