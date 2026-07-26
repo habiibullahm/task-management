@@ -118,11 +118,27 @@ export interface ActivityLog {
 }
 
 // API Response Types
+export interface ValidationErrorItem {
+  field?: string;
+  message: string;
+}
+
+/**
+ * Error response contract from the API (HTTP status = statusCode).
+ * { success: false, message, errors?, stack? } — stack only in development.
+ */
+export interface ApiErrorResponse {
+  success: false;
+  message: string;
+  errors?: ValidationErrorItem[];
+  stack?: string;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
   data?: T;
-  errors?: Record<string, string[]>;
+  errors?: ValidationErrorItem[];
   meta?: PaginationMeta;
 }
 

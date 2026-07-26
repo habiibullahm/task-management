@@ -2,13 +2,13 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest, CreateTaskDto, UpdateTaskDto } from '../types';
 import taskService from '../services/task.service';
 import { ResponseUtil } from '../utils/response.util';
+import { AppError } from '../middleware/error.middleware';
 
 export class TaskController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       const page = req.query.page ? parseInt(String(req.query.page), 10) : undefined;
@@ -31,8 +31,7 @@ export class TaskController {
   async getById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       const task = await taskService.getById(req.user.userId, req.params.id);
@@ -45,8 +44,7 @@ export class TaskController {
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       const data: CreateTaskDto & { status?: string } = req.body;
@@ -64,8 +62,7 @@ export class TaskController {
   async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       const data: UpdateTaskDto = req.body;
@@ -83,8 +80,7 @@ export class TaskController {
   async delete(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
-        ResponseUtil.unauthorized(res);
-        return;
+        throw new AppError(401, 'Unauthorized');
       }
 
       await taskService.delete(req.user.userId, req.params.id);

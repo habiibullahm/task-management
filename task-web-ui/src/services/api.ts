@@ -1,9 +1,8 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import type { ApiResponse } from '@/types';
+import type { ApiErrorResponse, ApiResponse, ValidationErrorItem } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
-// Create axios instance
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,6 +10,49 @@ const apiClient: AxiosInstance = axios.create({
   },
   timeout: 10000,
 });
+
+/**
+ * Extract a user-facing message from an API/Axios/unknown error.
+ * Prefers API `message`, then first validation `errors` entry.
+ */
+export const handleApiError = (
+  error: unknown,
+  fallback = 'An unexpected error occurred'
+): string => {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as ApiErrorResponse | undefined;
+    if (data?.message) {
+      return formatMessageWithErrors(data.message, data.errors);
+    }
+    if (data?.errors?.length) {
+      return formatValidationErrors(data.errors);
+    }
+    if (error.message) {
+      return error.message;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
+function formatValidationErrors(errors: ValidationErrorItem[]): string {
+  const first = errors[0];
+  if (!first) return 'Validation failed';
+  return first.field ? `${first.field}: ${first.message}` : first.message;
+}
+
+function formatMessageWithErrors(message: string, errors?: ValidationErrorItem[]): string {
+  if (!errors?.length) return message;
+  // Prefer the first field-level message when the top-level message is generic
+  if (message === 'Validation failed') {
+    return formatValidationErrors(errors);
+  }
+  return message;
+}
 
 // Request interceptor - Add auth token to requests
 apiClient.interceptors.request.use(
@@ -21,21 +63,16 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error: AxiosError) => {
-    return Promise.reject(error);
-  }
+  (error: AxiosError) => Promise.reject(new Error(handleApiError(error)))
 );
 
-// Response interceptor - Handle token refresh and errors
+// Response interceptor - Map API errors to Error(message) for stores/forms
 apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  async (error: AxiosError<ApiResponse>) => {
+  (response) => response,
+  async (error: AxiosError<ApiErrorResponse>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // If error is 401 and we haven't retried yet, try to refresh token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
@@ -54,41 +91,22 @@ apiClient.interceptors.response.use(
           localStorage.setItem('accessToken', accessToken);
           localStorage.setItem('refreshToken', newRefreshToken);
 
-          // Retry original request with new token
           if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           }
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, clear tokens and redirect to login
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';
-        return Promise.reject(refreshError);
+        return Promise.reject(new Error(handleApiError(refreshError, 'Session expired')));
       }
     }
 
-    return Promise.reject(error);
+    // Single clear Error so stores/forms can use error.message without Axios noise
+    return Promise.reject(new Error(handleApiError(error)));
   }
 );
 
 export default apiClient;
-
-// Helper function to handle API errors
-export const handleApiError = (error: unknown): string => {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<ApiResponse>;
-    if (axiosError.response?.data?.message) {
-      return axiosError.response.data.message;
-    }
-    if (axiosError.response?.data?.errors) {
-      const errors = axiosError.response.data.errors;
-      const firstError = Object.values(errors)[0];
-      return Array.isArray(firstError) ? firstError[0] : 'An error occurred';
-    }
-    return axiosError.message || 'An error occurred';
-  }
-  return 'An unexpected error occurred';
-};
-

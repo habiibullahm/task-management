@@ -1,14 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult, ValidationChain } from 'express-validator';
-import { ResponseUtil } from '../utils/response.util';
+import { AppError } from './error.middleware';
 
 export class ValidationMiddleware {
   /**
-   * Validate request using express-validator
+   * Validate request using express-validator.
+   * Failures are forwarded to ErrorMiddleware via AppError (422).
    */
   public static validate(validations: ValidationChain[]) {
-    return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-      // Run all validations
+    return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
       await Promise.all(validations.map((validation) => validation.run(req)));
 
       const errors = validationResult(req);
@@ -17,13 +17,12 @@ export class ValidationMiddleware {
         return;
       }
 
-      // Format errors
       const formattedErrors = errors.array().map((err) => ({
         field: err.type === 'field' ? err.path : undefined,
-        message: err.msg,
+        message: err.msg as string,
       }));
 
-      ResponseUtil.validationError(res, formattedErrors);
+      next(new AppError(422, 'Validation failed', true, formattedErrors));
     };
   }
 }

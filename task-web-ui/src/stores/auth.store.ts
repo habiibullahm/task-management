@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authService } from '@/services/auth.service';
+import { handleApiError } from '@/services/api';
 import type { User, LoginCredentials, RegisterData } from '@/types';
 
 interface AuthState {
@@ -34,14 +35,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         error: null 
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      const errorMessage = handleApiError(error, 'Login failed');
       set({ 
         error: errorMessage, 
         isLoading: false,
         isAuthenticated: false,
         user: null 
       });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -56,14 +57,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         error: null 
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      const errorMessage = handleApiError(error, 'Registration failed');
       set({ 
         error: errorMessage, 
         isLoading: false,
         isAuthenticated: false,
         user: null 
       });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -104,7 +105,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         error: null 
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch profile';
+      const errorMessage = handleApiError(error, 'Failed to fetch profile');
       set({ 
         error: errorMessage, 
         isLoading: false,

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { taskService, type CreateTaskData, type UpdateTaskData, type TaskFilters } from '@/services/task.service';
+import { handleApiError } from '@/services/api';
 import type { Task, TaskStatus } from '@/types';
 
 interface TaskState {
@@ -34,8 +35,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const { tasks } = await taskService.getTasks(filters || get().filters);
       set({ tasks, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tasks';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: handleApiError(error, 'Failed to fetch tasks'), isLoading: false });
     }
   },
 
@@ -45,8 +45,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const task = await taskService.getTask(id);
       set({ currentTask: task, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch task';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: handleApiError(error, 'Failed to fetch task'), isLoading: false });
     }
   },
 
@@ -60,9 +59,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }));
       return task;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
+      const errorMessage = handleApiError(error, 'Failed to create task');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -77,9 +76,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }));
       return updatedTask;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
+      const errorMessage = handleApiError(error, 'Failed to update task');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -93,9 +92,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         isLoading: false,
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete task';
+      const errorMessage = handleApiError(error, 'Failed to delete task');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -116,10 +115,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }));
     } catch (error) {
       // Revert on error
-      set({ tasks: previousTasks });
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update task status';
-      set({ error: errorMessage });
-      throw error;
+      const errorMessage = handleApiError(error, 'Failed to update task status');
+      set({ tasks: previousTasks, error: errorMessage });
+      throw new Error(errorMessage);
     }
   },
 

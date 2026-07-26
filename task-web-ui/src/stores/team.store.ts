@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { teamService, type CreateTeamData, type UpdateTeamData } from '@/services/team.service';
+import { handleApiError } from '@/services/api';
 import type { Team, TeamMember } from '@/types';
 
 interface TeamState {
@@ -33,8 +34,7 @@ export const useTeamStore = create<TeamState>((set) => ({
       const teams = await teamService.getTeams();
       set({ teams, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch teams';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: handleApiError(error, 'Failed to fetch teams'), isLoading: false });
     }
   },
 
@@ -44,8 +44,7 @@ export const useTeamStore = create<TeamState>((set) => ({
       const team = await teamService.getTeam(id);
       set({ currentTeam: team, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch team';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: handleApiError(error, 'Failed to fetch team'), isLoading: false });
     }
   },
 
@@ -59,9 +58,9 @@ export const useTeamStore = create<TeamState>((set) => ({
       }));
       return team;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create team';
+      const errorMessage = handleApiError(error, 'Failed to create team');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -76,9 +75,9 @@ export const useTeamStore = create<TeamState>((set) => ({
       }));
       return updatedTeam;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update team';
+      const errorMessage = handleApiError(error, 'Failed to update team');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -92,9 +91,9 @@ export const useTeamStore = create<TeamState>((set) => ({
         isLoading: false,
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete team';
+      const errorMessage = handleApiError(error, 'Failed to delete team');
       set({ error: errorMessage, isLoading: false });
-      throw error;
+      throw new Error(errorMessage);
     }
   },
 
@@ -104,8 +103,7 @@ export const useTeamStore = create<TeamState>((set) => ({
       const members = await teamService.getTeamMembers(teamId);
       set({ teamMembers: members, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch team members';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: handleApiError(error, 'Failed to fetch team members'), isLoading: false });
     }
   },
 

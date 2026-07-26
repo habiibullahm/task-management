@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskStore } from '@/stores/task.store';
+import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import type { TaskStatus } from '@/types';
 import { TaskStatus as Status } from '@/types';
+import { formatPriority, formatTaskStatus, priorityBadgeClass } from './task-labels';
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_FILTERS: Array<{ label: string; value?: TaskStatus }> = [
   { label: 'All', value: undefined },
@@ -21,11 +27,24 @@ export function TaskListPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { tasks, isLoading, fetchTasks, deleteTask, updateTaskStatus, setFilters, filters } = useTaskStore();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(filters.search ?? '');
 
   useEffect(() => {
     fetchTasks({ limit: 50 });
   }, [fetchTasks]);
+
+  useEffect(() => {
+    const trimmed = search.trim();
+    const nextSearch = trimmed || undefined;
+
+    const timer = window.setTimeout(() => {
+      const current = useTaskStore.getState().filters;
+      if (nextSearch === current.search) return;
+      setFilters({ ...current, search: nextSearch, limit: 50 });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [search, setFilters]);
 
   const handleLogout = async () => {
     await logout();
@@ -33,12 +52,7 @@ export function TaskListPage() {
   };
 
   const handleStatusFilter = (status?: TaskStatus) => {
-    setFilters({ ...filters, status, search: search || undefined, limit: 50 });
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFilters({ ...filters, search: search.trim() || undefined, limit: 50 });
+    setFilters({ ...filters, status, search: search.trim() || undefined, limit: 50 });
   };
 
   const handleDelete = async (id: string) => {
@@ -47,7 +61,7 @@ export function TaskListPage() {
       await deleteTask(id);
       toast.success('Task deleted');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete task');
+      toast.error(handleApiError(error, 'Failed to delete task'));
     }
   };
 
@@ -56,7 +70,7 @@ export function TaskListPage() {
       await updateTaskStatus(id, status);
       toast.success('Status updated');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update status');
+      toast.error(handleApiError(error, 'Failed to update status'));
     }
   };
 
@@ -94,16 +108,12 @@ export function TaskListPage() {
 
         <Card className="mb-6">
           <CardContent className="flex flex-col gap-4 pt-6">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <Input
-                placeholder="Search tasks..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <Button type="submit" variant="outline">
-                Search
-              </Button>
-            </form>
+            <Input
+              placeholder="Search tasks..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search tasks"
+            />
             <div className="flex flex-wrap gap-2">
               {STATUS_FILTERS.map((filter) => (
                 <Button
@@ -147,28 +157,42 @@ export function TaskListPage() {
                   {task.description && (
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{task.description}</p>
                   )}
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Priority: {task.priority}
-                    {task.dueDate ? ` · Due ${new Date(task.dueDate).toLocaleDateString()}` : ''}
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
+                        priorityBadgeClass(task.priority)
+                      )}
+                    >
+                      {formatPriority(task.priority)}
+                    </span>
+                    {task.dueDate ? <span>Due {new Date(task.dueDate).toLocaleDateString()}</span> : null}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                     value={task.status}
                     onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
+                    aria-label={`Status for ${task.title}`}
                   >
                     {Object.values(Status).map((status) => (
                       <option key={status} value={status}>
-                        {status.replace('_', ' ')}
+                        {formatTaskStatus(status)}
                       </option>
                     ))}
                   </select>
                   <Button variant="outline" size="sm" onClick={() => navigate(`/tasks/${task.id}`)}>
                     Edit
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(task.id)}>
-                    Delete
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => handleDelete(task.id)}
+                    aria-label="Delete"
+                  >
+                    <Trash2 />
                   </Button>
                 </div>
               </CardContent>

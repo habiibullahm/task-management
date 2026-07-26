@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
+import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +26,7 @@ export function RegisterForm() {
       toast.success('Registration successful!');
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Registration failed');
+      toast.error(handleApiError(error, 'Registration failed'));
     }
   };
 

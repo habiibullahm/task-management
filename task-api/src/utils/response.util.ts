@@ -1,16 +1,39 @@
 import { Response } from 'express';
 
+export interface ValidationErrorItem {
+  field?: string;
+  message: string;
+}
+
+/**
+ * Success response envelope.
+ * statusCode is conveyed by the HTTP status line, not the body.
+ */
 export interface ApiResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
-  errors?: any;
+  errors?: ValidationErrorItem[];
   meta?: {
     page?: number;
     limit?: number;
     total?: number;
     totalPages?: number;
   };
+}
+
+/**
+ * Error response contract used by ErrorMiddleware and ResponseUtil.error helpers.
+ * HTTP status = statusCode; body shape is always:
+ * { success: false, message: string, errors?: ValidationErrorItem[], stack?: string }
+ * `stack` is included only when NODE_ENV === 'development'.
+ */
+export interface ApiErrorResponse {
+  success: false;
+  message: string;
+  errors?: ValidationErrorItem[];
+  /** Present only in development */
+  stack?: string;
 }
 
 export class ResponseUtil {
@@ -34,18 +57,18 @@ export class ResponseUtil {
   }
 
   /**
-   * Send error response
+   * Send error response (prefer throwing AppError + ErrorMiddleware for most cases)
    */
   public static error(
     res: Response,
     message: string,
-    errors?: any,
+    errors?: ValidationErrorItem[] | null,
     statusCode: number = 400
   ): Response {
-    const response: ApiResponse = {
+    const response: ApiErrorResponse = {
       success: false,
       message,
-      errors,
+      ...(errors?.length ? { errors } : {}),
     };
     return res.status(statusCode).json(response);
   }
@@ -88,7 +111,7 @@ export class ResponseUtil {
   /**
    * Send validation error response
    */
-  public static validationError(res: Response, errors: any): Response {
+  public static validationError(res: Response, errors: ValidationErrorItem[]): Response {
     return this.error(res, 'Validation failed', errors, 422);
   }
 
@@ -98,9 +121,9 @@ export class ResponseUtil {
   public static serverError(
     res: Response,
     message: string = 'Internal server error',
-    error?: any
+    errors?: ValidationErrorItem[] | null
   ): Response {
-    return this.error(res, message, error, 500);
+    return this.error(res, message, errors ?? null, 500);
   }
 }
 
