@@ -9,6 +9,16 @@ process.env.CORS_ORIGIN = 'http://localhost:5173';
 process.env.RATE_LIMIT_WINDOW_MS = '900000';
 process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
 process.env.LOG_LEVEL = 'error';
+process.env.APP_URL = 'http://localhost:3000';
+
+// Keep mailer off by default so dotenv .env values cannot leak into tests.
+// Individual cases opt in by setting SMTP_* or RESEND_API_KEY.
+process.env.SMTP_HOST = '';
+process.env.SMTP_PORT = '';
+process.env.SMTP_USER = '';
+process.env.SMTP_PASS = '';
+process.env.RESEND_API_KEY = '';
+process.env.EMAIL_FROM = '';
 
 // Always use the dedicated test DB (never the app DATABASE_URL / .env).
 process.env.DATABASE_URL =
