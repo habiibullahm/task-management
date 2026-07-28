@@ -8,6 +8,9 @@ import { SettingsPage } from './features/auth/SettingsPage';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { TaskListPage } from './features/tasks/TaskListPage';
 import { TaskFormPage } from './features/tasks/TaskFormPage';
+import { TeamListPage } from './features/teams/TeamListPage';
+import { TeamFormPage } from './features/teams/TeamFormPage';
+import { TeamDetailPage } from './features/teams/TeamDetailPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
@@ -56,6 +59,30 @@ function App() {
           element={
             <ProtectedRoute>
               <TaskFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams"
+          element={
+            <ProtectedRoute>
+              <TeamListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams/new"
+          element={
+            <ProtectedRoute>
+              <TeamFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams/:id"
+          element={
+            <ProtectedRoute>
+              <TeamDetailPage />
             </ProtectedRoute>
           }
         />

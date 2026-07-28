@@ -540,17 +540,164 @@ describe('API + DB integration', () => {
     });
   });
 
-  describe('Teams (deferred)', () => {
+  describe('Teams', () => {
     it('requires auth for teams base path', async () => {
       const res = await request(app).get(`${API}/teams`);
       expect(res.status).toBe(401);
     });
 
-    it('has no implemented team handlers yet', async () => {
+    it('creates a team and lists it for the creator', async () => {
+      const { token, userId } = await registerUser({ firstName: 'Owner' });
+
+      const createRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token!))
+        .send({ name: 'Alpha Team', description: 'First team' });
+
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.success).toBe(true);
+      expect(createRes.body.data.name).toBe('Alpha Team');
+      expect(createRes.body.data.createdById).toBe(userId);
+      expect(createRes.body.data.members).toHaveLength(1);
+      expect(createRes.body.data.members[0].role).toBe('OWNER');
+      expect(createRes.body.data.members[0].userId).toBe(userId);
+
+      const listRes = await request(app).get(`${API}/teams`).set(authHeader(token!));
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data).toHaveLength(1);
+      expect(listRes.body.data[0].id).toBe(createRes.body.data.id);
+
+      const row = await prisma.team.findUnique({
+        where: { id: createRes.body.data.id },
+        include: { members: true },
+      });
+      expect(row).not.toBeNull();
+      expect(row!.members).toHaveLength(1);
+    });
+
+    it('updates and deletes a team as OWNER', async () => {
       const { token } = await registerUser();
-      const res = await request(app).get(`${API}/teams`).set(authHeader(token!));
-      // Router mounts auth but no handlers → Express 404
-      expect(res.status).toBe(404);
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token!))
+        .send({ name: 'Rename Me' });
+      const teamId = created.body.data.id as string;
+
+      const updateRes = await request(app)
+        .put(`${API}/teams/${teamId}`)
+        .set(authHeader(token!))
+        .send({ name: 'Renamed', description: 'Updated' });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.name).toBe('Renamed');
+      expect(updateRes.body.data.description).toBe('Updated');
+
+      const deleteRes = await request(app)
+        .delete(`${API}/teams/${teamId}`)
+        .set(authHeader(token!));
+      expect(deleteRes.status).toBe(200);
+
+      const listRes = await request(app).get(`${API}/teams`).set(authHeader(token!));
+      expect(listRes.body.data).toHaveLength(0);
+      expect(await prisma.team.count()).toBe(0);
+    });
+
+    it('adds, lists, updates role, and removes members', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const member = await registerUser({ firstName: 'Member' });
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Collab' });
+      const teamId = created.body.data.id as string;
+
+      const addRes = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: member.userId, role: 'MEMBER' });
+      expect(addRes.status).toBe(201);
+      expect(addRes.body.data.userId).toBe(member.userId);
+      expect(addRes.body.data.role).toBe('MEMBER');
+      const membershipId = addRes.body.data.id as string;
+
+      const listMembersRes = await request(app)
+        .get(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!));
+      expect(listMembersRes.status).toBe(200);
+      expect(listMembersRes.body.data).toHaveLength(2);
+
+      // Member can see the team
+      const memberList = await request(app)
+        .get(`${API}/teams`)
+        .set(authHeader(member.token!));
+      expect(memberList.body.data).toHaveLength(1);
+
+      const roleRes = await request(app)
+        .put(`${API}/teams/${teamId}/members/${membershipId}`)
+        .set(authHeader(owner.token!))
+        .send({ role: 'ADMIN' });
+      expect(roleRes.status).toBe(200);
+      expect(roleRes.body.data.role).toBe('ADMIN');
+
+      const removeRes = await request(app)
+        .delete(`${API}/teams/${teamId}/members/${membershipId}`)
+        .set(authHeader(owner.token!));
+      expect(removeRes.status).toBe(200);
+
+      const afterRemove = await request(app)
+        .get(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!));
+      expect(afterRemove.body.data).toHaveLength(1);
+    });
+
+    it('forbids non-members and blocks removing the last OWNER', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Private' });
+      const teamId = created.body.data.id as string;
+      const ownerMembershipId = created.body.data.members[0].id as string;
+
+      const forbidden = await request(app)
+        .get(`${API}/teams/${teamId}`)
+        .set(authHeader(stranger.token!));
+      expect(forbidden.status).toBe(403);
+
+      const removeOwner = await request(app)
+        .delete(`${API}/teams/${teamId}/members/${ownerMembershipId}`)
+        .set(authHeader(owner.token!));
+      expect(removeOwner.status).toBe(400);
+    });
+
+    it('rejects duplicate membership and unknown user', async () => {
+      const owner = await registerUser();
+      const other = await registerUser();
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Dup Check' });
+      const teamId = created.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: other.userId });
+
+      const dup = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: other.userId });
+      expect(dup.status).toBe(409);
+
+      const missing = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: '00000000-0000-4000-8000-000000000099' });
+      expect(missing.status).toBe(404);
     });
   });
 });

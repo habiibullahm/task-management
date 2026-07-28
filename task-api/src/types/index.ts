@@ -73,6 +73,10 @@ export interface AddTeamMemberDto {
   role?: 'OWNER' | 'ADMIN' | 'MEMBER';
 }
 
+export interface UpdateTeamMemberDto {
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
 // Pagination
 export interface PaginationParams {
   page?: number;

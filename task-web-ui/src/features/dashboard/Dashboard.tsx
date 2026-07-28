@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskStore } from '@/stores/task.store';
 import { Button } from '@/components/ui/button';
@@ -142,7 +141,7 @@ export function Dashboard() {
               <Button
                 className="w-full sm:col-span-2 lg:col-span-1"
                 variant="outline"
-                onClick={() => toast.message('Teams coming in a later release')}
+                onClick={() => navigate('/teams')}
               >
                 Manage Teams
               </Button>
