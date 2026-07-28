@@ -236,6 +236,128 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 
 ---
 
+### Change Password
+
+#### POST /auth/change-password
+Change the authenticated user's password.
+
+**Request Body:**
+```json
+{
+  "currentPassword": "SecurePass123!",
+  "newPassword": "NewSecurePass123!"
+}
+```
+
+---
+
+### Forgot Password
+
+#### POST /auth/forgot-password
+Request a one-time reset email (SMTP or Resend when configured). Always returns a generic success message.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+---
+
+### Reset Password
+
+#### POST /auth/reset-password
+Reset password using the emailed token.
+
+**Request Body:**
+```json
+{
+  "token": "raw-reset-token",
+  "newPassword": "NewSecurePass123!"
+}
+```
+
+---
+
+## Task Endpoints
+
+All task routes require authentication. Visibility includes tasks you created, are assigned to, or that belong to a team you are in. Only the creator can modify/delete.
+
+### List Tasks
+
+#### GET /tasks
+Query params (all optional): `status`, `priority`, `search`, `sort` (`dueDate`|`updatedAt`), `teamId`, `assignedToId`, `page`, `limit`.
+
+### Create Task
+
+#### POST /tasks
+```json
+{
+  "title": "Ship docs",
+  "description": "Optional",
+  "status": "TODO",
+  "priority": "MEDIUM",
+  "dueDate": "2026-12-31T00:00:00.000Z",
+  "teamId": "uuid-optional",
+  "assignedToId": "uuid-optional"
+}
+```
+
+If `teamId` is set, the actor must be a team member. If both `teamId` and `assignedToId` are set, the assignee must be on that team.
+
+### Get / Update / Delete Task
+
+- `GET /tasks/:id`
+- `PUT /tasks/:id` — same fields as create; `teamId` / `assignedToId` may be `null` to clear
+- `DELETE /tasks/:id`
+
+### List Task Comments
+
+#### GET /tasks/:id/comments
+
+---
+
+## Team Endpoints
+
+All require authentication. List returns only teams you belong to.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/teams` | Memberships for current user |
+| POST | `/teams` | Body: `{ name, description? }` — creator becomes OWNER |
+| GET | `/teams/:id` | Members + creator included |
+| PUT | `/teams/:id` | OWNER or ADMIN |
+| DELETE | `/teams/:id` | OWNER only |
+| GET | `/teams/:id/members` | |
+| POST | `/teams/:id/members` | Body: `{ userId, role?: "ADMIN"\|"MEMBER" }` |
+| PUT | `/teams/:id/members/:memberId` | Body: `{ role }` — OWNER only; `memberId` is membership row id |
+| DELETE | `/teams/:id/members/:memberId` | Cannot remove last OWNER |
+
+---
+
+## Comment Endpoints
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/comments` | Body: `{ taskId, content }` — requires task access |
+| PUT | `/comments/:id` | Author only |
+| DELETE | `/comments/:id` | Author only |
+
+---
+
+## Realtime (Socket.IO)
+
+- Connect to the API host with path `/socket.io`
+- Authenticate with JWT: `io(url, { auth: { token: accessToken } })`
+- Server emits `notification` payloads:
+  - `type`: `task:created` | `task:updated` | `task:deleted` | `comment:created`
+  - `message`, `taskId`, `teamId`, `actorUserId`, `data?`
+
+Fans out to task creator, assignee, and team members.
+
+---
+
 ## Error Codes
 
 | Status Code | Description |
@@ -250,6 +372,7 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 | 409 | Conflict - Resource already exists |
 | 422 | Unprocessable Entity - Validation errors |
 | 500 | Internal Server Error - Server error |
+| 503 | Service Unavailable - Health check when DB is degraded |
 
 ---
 
@@ -285,7 +408,15 @@ curl -X GET http://localhost:3000/api/v1/auth/profile \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-4. **Refresh Token:**
+4. **Create a task:**
+```bash
+curl -X POST http://localhost:3000/api/v1/tasks \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "My first task", "priority": "HIGH" }'
+```
+
+5. **Refresh Token:**
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
@@ -294,7 +425,7 @@ curl -X POST http://localhost:3000/api/v1/auth/refresh \
   }'
 ```
 
-5. **Logout:**
+6. **Logout:**
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/logout \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
