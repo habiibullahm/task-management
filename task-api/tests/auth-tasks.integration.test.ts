@@ -780,4 +780,81 @@ describe('API + DB integration', () => {
       expect(missing.status).toBe(404);
     });
   });
+
+  describe('Comments', () => {
+    it('creates, lists, updates, and deletes comments on an accessible task', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const taskRes = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(owner.token!))
+        .send({ title: 'Commented task' });
+      const taskId = taskRes.body.data.id as string;
+
+      const createRes = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(owner.token!))
+        .send({ taskId, content: 'First note' });
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.data.content).toBe('First note');
+      expect(createRes.body.data.userId).toBe(owner.userId);
+      expect(createRes.body.data.user.firstName).toBe('Owner');
+      const commentId = createRes.body.data.id as string;
+
+      const listRes = await request(app)
+        .get(`${API}/tasks/${taskId}/comments`)
+        .set(authHeader(owner.token!));
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data).toHaveLength(1);
+      expect(listRes.body.data[0].id).toBe(commentId);
+
+      const updateRes = await request(app)
+        .put(`${API}/comments/${commentId}`)
+        .set(authHeader(owner.token!))
+        .send({ content: 'Updated note' });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.content).toBe('Updated note');
+
+      // Stranger cannot list or comment
+      const forbiddenList = await request(app)
+        .get(`${API}/tasks/${taskId}/comments`)
+        .set(authHeader(stranger.token!));
+      expect(forbiddenList.status).toBe(403);
+
+      const forbiddenCreate = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(stranger.token!))
+        .send({ taskId, content: 'Nope' });
+      expect(forbiddenCreate.status).toBe(403);
+
+      // Stranger cannot edit/delete owner's comment
+      const forbiddenEdit = await request(app)
+        .put(`${API}/comments/${commentId}`)
+        .set(authHeader(stranger.token!))
+        .send({ content: 'Hijack' });
+      expect(forbiddenEdit.status).toBe(403);
+
+      const deleteRes = await request(app)
+        .delete(`${API}/comments/${commentId}`)
+        .set(authHeader(owner.token!));
+      expect(deleteRes.status).toBe(200);
+      expect(await prisma.comment.count({ where: { taskId } })).toBe(0);
+    });
+
+    it('rejects empty comment content', async () => {
+      const { token } = await registerUser();
+      const taskRes = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token!))
+        .send({ title: 'Empty comment task' });
+
+      const res = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(token!))
+        .send({ taskId: taskRes.body.data.id, content: '   ' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
 });

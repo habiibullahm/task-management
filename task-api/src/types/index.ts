@@ -78,6 +78,16 @@ export interface UpdateTeamMemberDto {
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
 }
 
+// Comment DTOs
+export interface CreateCommentDto {
+  content: string;
+  taskId: string;
+}
+
+export interface UpdateCommentDto {
+  content: string;
+}
+
 // Pagination
 export interface PaginationParams {
   page?: number;

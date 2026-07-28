@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Priority, TaskStatus } from '@/types';
 import type { Priority as PriorityType, TaskStatus as TaskStatusType, TeamMember } from '@/types';
 import { formatPriority, formatTaskStatus } from './task-labels';
+import { TaskComments } from './TaskComments';
 
 interface TaskFormState {
   title: string;
@@ -313,6 +314,12 @@ export function TaskFormPage() {
             </CardFooter>
           </form>
         </Card>
+
+        {isEdit && id ? (
+          <div className="mt-6">
+            <TaskComments taskId={id} />
+          </div>
+        ) : null}
       </main>
     </div>
   );

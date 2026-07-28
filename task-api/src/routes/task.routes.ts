@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { AuthMiddleware } from '../middleware/auth.middleware';
 import { ValidationMiddleware } from '../middleware/validation.middleware';
 import taskController from '../controllers/task.controller';
+import commentController from '../controllers/comment.controller';
 
 const router = Router();
 
@@ -42,6 +43,7 @@ const updateValidation = [
 
 router.get('/', taskController.list.bind(taskController));
 router.post('/', ValidationMiddleware.validate(createValidation), taskController.create.bind(taskController));
+router.get('/:id/comments', commentController.listByTask.bind(commentController));
 router.get('/:id', taskController.getById.bind(taskController));
 router.put('/:id', ValidationMiddleware.validate(updateValidation), taskController.update.bind(taskController));
 router.delete('/:id', taskController.delete.bind(taskController));
