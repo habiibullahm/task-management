@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTeamStore } from '@/stores/team.store';
 import { handleApiError } from '@/services/api';
+import { copyWithToast } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -270,7 +271,7 @@ export function TeamDetailPage() {
                 <CardTitle>Members</CardTitle>
                 <CardDescription>
                   {canManage
-                    ? 'Add members by user ID (UUID from their account profile).'
+                    ? 'Add members with their User ID from Settings → Profile (Copy).'
                     : 'People on this team.'}
                 </CardDescription>
               </CardHeader>
@@ -380,10 +381,36 @@ export function TeamDetailPage() {
             </Card>
 
             {user?.id ? (
-              <p className="text-xs text-muted-foreground">
-                Your user ID (share to be invited):{' '}
-                <span className="font-mono">{user.id}</span>
-              </p>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Your User ID</CardTitle>
+                  <CardDescription>
+                    Copy and send this to a team owner so they can add you. Also available under{' '}
+                    <Link to="/settings" className="underline underline-offset-2">
+                      Settings
+                    </Link>
+                    .
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={user.id}
+                      className="font-mono text-xs sm:text-sm"
+                      aria-label="Your user ID"
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => copyWithToast(user.id, 'User ID copied')}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             ) : null}
           </>
         )}
