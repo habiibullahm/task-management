@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authService } from '@/services/auth.service';
 import { handleApiError } from '@/services/api';
+import { disconnectRealtime } from '@/services/realtime';
 import type { User, LoginCredentials, RegisterData } from '@/types';
 
 interface AuthState {
@@ -72,6 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       await authService.logout();
+      disconnectRealtime();
       set({ 
         user: null, 
         isAuthenticated: false, 
@@ -80,6 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch (error) {
       // Even if logout fails on server, clear local state
+      disconnectRealtime();
       set({ 
         user: null, 
         isAuthenticated: false, 

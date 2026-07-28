@@ -9,6 +9,7 @@ import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NotificationBell } from '@/components/NotificationBell';
 import { cn } from '@/lib/utils';
 import type { Priority, TaskStatus } from '@/types';
 import { Priority as PriorityEnum, TaskStatus as Status } from '@/types';
@@ -197,9 +198,13 @@ export function TaskListPage() {
             <span className="text-sm text-muted-foreground">My Tasks</span>
           </div>
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <span className="text-sm text-muted-foreground">
               {user?.firstName} {user?.lastName}
             </span>
+            <Button variant="outline" onClick={() => navigate('/boards')}>
+              Board
+            </Button>
             <Button variant="outline" onClick={() => navigate('/settings')}>
               Settings
             </Button>

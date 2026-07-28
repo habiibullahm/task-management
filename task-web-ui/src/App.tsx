@@ -11,83 +11,95 @@ import { TaskFormPage } from './features/tasks/TaskFormPage';
 import { TeamListPage } from './features/teams/TeamListPage';
 import { TeamFormPage } from './features/teams/TeamFormPage';
 import { TeamDetailPage } from './features/teams/TeamDetailPage';
+import { KanbanBoardPage } from './features/boards/KanbanBoardPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RealtimeProvider } from './components/RealtimeProvider';
 
 function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" richColors />
-      <Routes>
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="/register" element={<RegisterForm />} />
-        <Route path="/forgot-password" element={<ForgotPasswordForm />} />
-        <Route path="/reset-password" element={<ResetPasswordForm />} />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tasks"
-          element={
-            <ProtectedRoute>
-              <TaskListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tasks/new"
-          element={
-            <ProtectedRoute>
-              <TaskFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tasks/:id"
-          element={
-            <ProtectedRoute>
-              <TaskFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/teams"
-          element={
-            <ProtectedRoute>
-              <TeamListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/teams/new"
-          element={
-            <ProtectedRoute>
-              <TeamFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/teams/:id"
-          element={
-            <ProtectedRoute>
-              <TeamDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      <RealtimeProvider>
+        <Routes>
+          <Route path="/login" element={<LoginForm />} />
+          <Route path="/register" element={<RegisterForm />} />
+          <Route path="/forgot-password" element={<ForgotPasswordForm />} />
+          <Route path="/reset-password" element={<ResetPasswordForm />} />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tasks"
+            element={
+              <ProtectedRoute>
+                <TaskListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tasks/new"
+            element={
+              <ProtectedRoute>
+                <TaskFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tasks/:id"
+            element={
+              <ProtectedRoute>
+                <TaskFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/boards"
+            element={
+              <ProtectedRoute>
+                <KanbanBoardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teams"
+            element={
+              <ProtectedRoute>
+                <TeamListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teams/new"
+            element={
+              <ProtectedRoute>
+                <TeamFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teams/:id"
+            element={
+              <ProtectedRoute>
+                <TeamDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </RealtimeProvider>
     </BrowserRouter>
   );
 }

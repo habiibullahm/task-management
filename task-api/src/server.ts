@@ -1,16 +1,19 @@
+import http from 'http';
 import app from './app';
 import env from './config/env';
 import Database from './config/database';
+import { initRealtime } from './realtime/socket';
 
 const PORT = env.get('PORT');
 
 async function startServer() {
   try {
-    // Connect to database
     await Database.connect();
 
-    // Start server
-    const server = app.listen(PORT, () => {
+    const server = http.createServer(app);
+    initRealtime(server);
+
+    server.listen(PORT, () => {
       console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -19,6 +22,7 @@ async function startServer() {
 ║   Environment: ${env.get('NODE_ENV').padEnd(42)}║
 ║   Port:        ${PORT.toString().padEnd(42)}║
 ║   API Prefix:  ${env.get('API_PREFIX').padEnd(42)}║
+║   WebSocket:   /socket.io                                 ║
 ║                                                           ║
 ║   📚 API Documentation:                                   ║
 ║   Health Check: http://localhost:${PORT}${env.get('API_PREFIX')}/health     ║
@@ -43,7 +47,6 @@ async function startServer() {
   }
 }
 
-// Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
   await Database.disconnect();
@@ -56,5 +59,4 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Start the server
 startServer();

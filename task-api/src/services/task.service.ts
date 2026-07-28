@@ -4,6 +4,7 @@ import teamRepository from '../repositories/team.repository';
 import userRepository from '../repositories/user.repository';
 import { AppError } from '../middleware/error.middleware';
 import { CreateTaskDto, UpdateTaskDto } from '../types';
+import { emitTaskRealtime } from '../realtime/socket';
 
 export interface ListTasksQuery {
   status?: string;
@@ -113,7 +114,7 @@ export class TaskService {
 
     await this.validateTeamAndAssignee(userId, teamId, assignedToId);
 
-    return taskRepository.create({
+    const task = await taskRepository.create({
       title: data.title.trim(),
       description: data.description?.trim() || null,
       priority,
@@ -123,6 +124,19 @@ export class TaskService {
       ...(teamId ? { team: { connect: { id: teamId } } } : {}),
       ...(assignedToId ? { assignedTo: { connect: { id: assignedToId } } } : {}),
     });
+
+    void emitTaskRealtime({
+      type: 'task:created',
+      message: `Task created: ${task.title}`,
+      actorUserId: userId,
+      taskId: task.id,
+      createdById: task.createdById,
+      assignedToId: task.assignedToId,
+      teamId: task.teamId,
+      data: task,
+    });
+
+    return task;
   }
 
   async update(userId: string, taskId: string, data: UpdateTaskDto): Promise<Task> {
@@ -147,7 +161,7 @@ export class TaskService {
       );
     }
 
-    return taskRepository.update(taskId, {
+    const task = await taskRepository.update(taskId, {
       ...(data.title !== undefined ? { title: data.title.trim() } : {}),
       ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
       ...(data.status !== undefined ? { status: parseStatus(data.status) } : {}),
@@ -166,6 +180,19 @@ export class TaskService {
           : { assignedTo: { disconnect: true } }
         : {}),
     });
+
+    void emitTaskRealtime({
+      type: 'task:updated',
+      message: `Task updated: ${task.title}`,
+      actorUserId: userId,
+      taskId: task.id,
+      createdById: task.createdById,
+      assignedToId: task.assignedToId,
+      teamId: task.teamId,
+      data: task,
+    });
+
+    return task;
   }
 
   async delete(userId: string, taskId: string): Promise<void> {
@@ -175,6 +202,16 @@ export class TaskService {
     }
     this.assertCanModify(userId, existing);
     await taskRepository.delete(taskId);
+
+    void emitTaskRealtime({
+      type: 'task:deleted',
+      message: `Task deleted: ${existing.title}`,
+      actorUserId: userId,
+      taskId: existing.id,
+      createdById: existing.createdById,
+      assignedToId: existing.assignedToId,
+      teamId: existing.teamId,
+    });
   }
 
   private async validateTeamAndAssignee(
