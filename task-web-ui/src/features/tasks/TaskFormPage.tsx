@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useTaskStore } from '@/stores/task.store';
+import { useTeamStore } from '@/stores/team.store';
 import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Priority, TaskStatus } from '@/types';
-import type { Priority as PriorityType, TaskStatus as TaskStatusType } from '@/types';
+import type { Priority as PriorityType, TaskStatus as TaskStatusType, TeamMember } from '@/types';
 import { formatPriority, formatTaskStatus } from './task-labels';
 
 interface TaskFormState {
@@ -17,6 +18,8 @@ interface TaskFormState {
   status: TaskStatusType;
   priority: PriorityType;
   dueDate: string;
+  teamId: string;
+  assignedToId: string;
 }
 
 const emptyForm: TaskFormState = {
@@ -25,15 +28,29 @@ const emptyForm: TaskFormState = {
   status: TaskStatus.TODO,
   priority: Priority.MEDIUM,
   dueDate: '',
+  teamId: '',
+  assignedToId: '',
 };
+
+function memberLabel(member: TeamMember): string {
+  if (member.user) {
+    return `${member.user.firstName} ${member.user.lastName} (${member.user.email})`;
+  }
+  return member.userId;
+}
 
 export function TaskFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const { createTask, updateTask, fetchTask, currentTask, isLoading } = useTaskStore();
+  const { teams, fetchTeams } = useTeamStore();
   const [form, setForm] = useState<TaskFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchTeams();
+  }, [fetchTeams]);
 
   useEffect(() => {
     if (id) {
@@ -49,15 +66,38 @@ export function TaskFormPage() {
         status: currentTask.status,
         priority: currentTask.priority,
         dueDate: currentTask.dueDate ? currentTask.dueDate.slice(0, 10) : '',
+        teamId: currentTask.teamId || '',
+        assignedToId: currentTask.assignedToId || '',
       });
     }
   }, [isEdit, currentTask, id]);
+
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.id === form.teamId),
+    [teams, form.teamId]
+  );
+
+  const assigneeOptions = useMemo(() => {
+    const members = selectedTeam?.members ?? [];
+    return members.filter((m) => m.userId);
+  }, [selectedTeam]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      if (name === 'teamId') {
+        const nextTeam = teams.find((t) => t.id === value);
+        const stillValid = nextTeam?.members?.some((m) => m.userId === prev.assignedToId);
+        return {
+          ...prev,
+          teamId: value,
+          assignedToId: stillValid ? prev.assignedToId : '',
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,19 +109,30 @@ export function TaskFormPage() {
 
     setSaving(true);
     try {
-      const payload = {
-        title: form.title.trim(),
-        description: form.description.trim() || undefined,
-        status: form.status,
-        priority: form.priority,
-        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
-      };
+      const teamId = form.teamId || null;
+      const assignedToId = form.assignedToId || null;
 
       if (isEdit && id) {
-        await updateTask(id, payload);
+        await updateTask(id, {
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          status: form.status,
+          priority: form.priority,
+          dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+          teamId,
+          assignedToId,
+        });
         toast.success('Task updated');
       } else {
-        await createTask(payload);
+        await createTask({
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          status: form.status,
+          priority: form.priority,
+          dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
+          ...(teamId ? { teamId } : {}),
+          ...(assignedToId ? { assignedToId } : {}),
+        });
         toast.success('Task created');
       }
       navigate('/tasks');
@@ -110,7 +161,9 @@ export function TaskFormPage() {
           <CardHeader>
             <CardTitle>{isEdit ? 'Edit Task' : 'Create Task'}</CardTitle>
             <CardDescription>
-              {isEdit ? 'Update title, status, and other details.' : 'Add a personal task to your list.'}
+              {isEdit
+                ? 'Update details, team, and assignee.'
+                : 'Add a task. Optionally attach a team and assignee.'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -188,6 +241,64 @@ export function TaskFormPage() {
                       onChange={handleChange}
                       disabled={saving}
                     />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="teamId">Team</Label>
+                      <select
+                        id="teamId"
+                        name="teamId"
+                        value={form.teamId}
+                        onChange={handleChange}
+                        disabled={saving}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                        aria-label="Team"
+                      >
+                        <option value="">No team (personal)</option>
+                        {teams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="assignedToId">Assignee</Label>
+                      {form.teamId ? (
+                        <select
+                          id="assignedToId"
+                          name="assignedToId"
+                          value={form.assignedToId}
+                          onChange={handleChange}
+                          disabled={saving || assigneeOptions.length === 0}
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                          aria-label="Assignee"
+                        >
+                          <option value="">Unassigned</option>
+                          {assigneeOptions.map((member) => (
+                            <option key={member.id} value={member.userId}>
+                              {memberLabel(member)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          id="assignedToId"
+                          name="assignedToId"
+                          value={form.assignedToId}
+                          onChange={handleChange}
+                          disabled={saving}
+                          placeholder="Optional user ID"
+                          aria-label="Assignee user ID"
+                          className="font-mono text-xs sm:text-sm"
+                        />
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {form.teamId
+                          ? 'Pick a team member, or leave unassigned.'
+                          : 'Optional. Prefer attaching a team to assign from members.'}
+                      </p>
+                    </div>
                   </div>
                 </>
               )}

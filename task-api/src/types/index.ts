@@ -55,6 +55,7 @@ export interface UpdateTaskDto {
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate?: Date | string | null;
   assignedToId?: string | null;
+  teamId?: string | null;
 }
 
 // Team DTOs

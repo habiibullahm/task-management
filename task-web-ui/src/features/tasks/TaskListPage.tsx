@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskStore } from '@/stores/task.store';
+import { useTeamStore } from '@/stores/team.store';
 import { handleApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,13 +38,17 @@ type ListQuery = {
   priority?: Priority;
   sort?: 'dueDate' | 'updatedAt';
   search?: string;
+  teamId?: string;
+  assignedToMe?: boolean;
 };
 
-function parseListQuery(params: URLSearchParams): ListQuery {
+function parseListQuery(params: URLSearchParams, currentUserId?: string): ListQuery {
   const statusParam = params.get('status') as TaskStatus | null;
   const priorityParam = params.get('priority') as Priority | null;
   const sortParam = params.get('sort');
   const searchParam = params.get('search')?.trim() || undefined;
+  const teamIdParam = params.get('teamId')?.trim() || undefined;
+  const assignedToIdParam = params.get('assignedToId')?.trim() || undefined;
 
   return {
     status: statusParam && Object.values(Status).includes(statusParam) ? statusParam : undefined,
@@ -51,9 +56,10 @@ function parseListQuery(params: URLSearchParams): ListQuery {
       priorityParam && Object.values(PriorityEnum).includes(priorityParam)
         ? priorityParam
         : undefined,
-    // Omit default updatedAt from URL; only persist dueDate (or explicit updatedAt if present)
     sort: sortParam === 'dueDate' || sortParam === 'updatedAt' ? sortParam : undefined,
     search: searchParam,
+    teamId: teamIdParam,
+    assignedToMe: Boolean(currentUserId && assignedToIdParam === currentUserId),
   };
 }
 
@@ -61,32 +67,40 @@ export function TaskListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout } = useAuthStore();
+  const { teams, fetchTeams } = useTeamStore();
   const { tasks, isLoading, deleteTask, updateTaskStatus, setFilters, filters } = useTaskStore();
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
+
+  useEffect(() => {
+    fetchTeams();
+  }, [fetchTeams]);
 
   const syncUrl = (next: ListQuery) => {
     const params = new URLSearchParams();
     if (next.status) params.set('status', next.status);
     if (next.priority) params.set('priority', next.priority);
-    // Keep URLs short: only write non-default sort
     if (next.sort === 'dueDate') params.set('sort', 'dueDate');
     if (next.search?.trim()) params.set('search', next.search.trim());
+    if (next.teamId) params.set('teamId', next.teamId);
+    if (next.assignedToMe && user?.id) params.set('assignedToId', user.id);
     setSearchParams(params, { replace: true });
   };
 
   // URL is the source of truth for list filters
   useEffect(() => {
-    const next = parseListQuery(searchParams);
+    const next = parseListQuery(searchParams, user?.id);
     setSearch(next.search ?? '');
     setFilters({
       status: next.status,
       priority: next.priority,
       sort: next.sort,
       search: next.search,
+      teamId: next.teamId,
+      assignedToId: next.assignedToMe && user?.id ? user.id : undefined,
       limit: 50,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, user?.id]);
 
   // Debounce search → URL (which then drives fetch via the effect above)
   useEffect(() => {
@@ -95,11 +109,9 @@ export function TaskListPage() {
     if (trimmed === urlSearch) return;
 
     const timer = window.setTimeout(() => {
-      const current = useTaskStore.getState().filters;
+      const current = parseListQuery(searchParams, user?.id);
       syncUrl({
-        status: current.status,
-        priority: current.priority,
-        sort: current.sort,
+        ...current,
         search: trimmed || undefined,
       });
     }, SEARCH_DEBOUNCE_MS);
@@ -113,29 +125,32 @@ export function TaskListPage() {
     navigate('/login');
   };
 
+  const currentQuery = (): ListQuery => parseListQuery(searchParams, user?.id);
+
   const handleStatusFilter = (status?: TaskStatus) => {
-    syncUrl({
-      status,
-      priority: filters.priority,
-      sort: filters.sort,
-      search: search.trim() || undefined,
-    });
+    syncUrl({ ...currentQuery(), status, search: search.trim() || undefined });
   };
 
   const handlePriorityFilter = (priority?: Priority) => {
-    syncUrl({
-      status: filters.status,
-      priority,
-      sort: filters.sort,
-      search: search.trim() || undefined,
-    });
+    syncUrl({ ...currentQuery(), priority, search: search.trim() || undefined });
   };
 
   const handleSort = (sort: 'dueDate' | 'updatedAt') => {
     syncUrl({
-      status: filters.status,
-      priority: filters.priority,
+      ...currentQuery(),
       sort: sort === 'updatedAt' ? undefined : sort,
+      search: search.trim() || undefined,
+    });
+  };
+
+  const handleTeamFilter = (teamId?: string) => {
+    syncUrl({ ...currentQuery(), teamId, search: search.trim() || undefined });
+  };
+
+  const handleAssignedToMe = (enabled: boolean) => {
+    syncUrl({
+      ...currentQuery(),
+      assignedToMe: enabled,
       search: search.trim() || undefined,
     });
   };
@@ -164,10 +179,12 @@ export function TaskListPage() {
     }
   };
 
-  // Sort alone must not count as an "active filter" for empty-state messaging
-  const hasActiveFilters = Boolean(filters.status || filters.priority || filters.search);
+  const hasActiveFilters = Boolean(
+    filters.status || filters.priority || filters.search || filters.teamId || filters.assignedToId
+  );
   const empty = useMemo(() => !isLoading && tasks.length === 0, [isLoading, tasks.length]);
   const sortIsDueDate = filters.sort === 'dueDate';
+  const assignedToMe = Boolean(user?.id && filters.assignedToId === user.id);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -197,7 +214,9 @@ export function TaskListPage() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-3xl font-bold">My Tasks</h2>
-            <p className="text-muted-foreground">Create, edit, and update status for your personal tasks.</p>
+            <p className="text-muted-foreground">
+              Create, edit, and update status for your personal and team tasks.
+            </p>
           </div>
           <Button onClick={() => navigate('/tasks/new')}>Create Task</Button>
         </div>
@@ -235,6 +254,34 @@ export function TaskListPage() {
                   {filter.label}
                 </Button>
               ))}
+            </div>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by team">
+              <Button
+                size="sm"
+                variant={!filters.teamId ? 'default' : 'outline'}
+                onClick={() => handleTeamFilter(undefined)}
+              >
+                All teams
+              </Button>
+              {teams.map((team) => (
+                <Button
+                  key={team.id}
+                  size="sm"
+                  variant={filters.teamId === team.id ? 'default' : 'outline'}
+                  onClick={() => handleTeamFilter(team.id)}
+                >
+                  {team.name}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by assignee">
+              <Button
+                size="sm"
+                variant={assignedToMe ? 'default' : 'outline'}
+                onClick={() => handleAssignedToMe(!assignedToMe)}
+              >
+                Assigned to me
+              </Button>
             </div>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Sort tasks">
               <Button
@@ -305,7 +352,19 @@ export function TaskListPage() {
                     >
                       {formatPriority(task.priority)}
                     </span>
-                    {task.dueDate ? <span>Due {new Date(task.dueDate).toLocaleDateString()}</span> : null}
+                    {task.team?.name ? (
+                      <span className="inline-flex items-center rounded-md border px-2 py-0.5">
+                        {task.team.name}
+                      </span>
+                    ) : null}
+                    {task.assignedTo ? (
+                      <span>
+                        Assigned to {task.assignedTo.firstName} {task.assignedTo.lastName}
+                      </span>
+                    ) : null}
+                    {task.dueDate ? (
+                      <span>Due {new Date(task.dueDate).toLocaleDateString()}</span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

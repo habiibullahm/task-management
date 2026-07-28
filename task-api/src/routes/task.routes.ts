@@ -21,6 +21,7 @@ const createValidation = [
     .withMessage('Invalid priority'),
   body('dueDate').optional({ nullable: true }).isISO8601().withMessage('dueDate must be ISO8601'),
   body('assignedToId').optional({ nullable: true }).isUUID().withMessage('assignedToId must be a UUID'),
+  body('teamId').optional({ nullable: true }).isUUID().withMessage('teamId must be a UUID'),
 ];
 
 const updateValidation = [
@@ -36,6 +37,7 @@ const updateValidation = [
     .withMessage('Invalid priority'),
   body('dueDate').optional({ nullable: true }).isISO8601().withMessage('dueDate must be ISO8601'),
   body('assignedToId').optional({ nullable: true }).isUUID().withMessage('assignedToId must be a UUID'),
+  body('teamId').optional({ nullable: true }).isUUID().withMessage('teamId must be a UUID'),
 ];
 
 router.get('/', taskController.list.bind(taskController));

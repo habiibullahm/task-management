@@ -538,6 +538,86 @@ describe('API + DB integration', () => {
 
       expect(await prisma.task.findUnique({ where: { id: taskId } })).not.toBeNull();
     });
+
+    it('attaches team and assignee with validation and filters', async () => {
+      const member = await registerUser({ firstName: 'Member' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const teamRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token))
+        .send({ name: 'Task Team' });
+      const teamId = teamRes.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: member.userId, role: 'MEMBER' });
+
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Team task',
+          teamId,
+          assignedToId: member.userId,
+        });
+      expect(created.status).toBe(201);
+      expect(created.body.data.teamId).toBe(teamId);
+      expect(created.body.data.assignedToId).toBe(member.userId);
+      expect(created.body.data.team.name).toBe('Task Team');
+
+      // Assignee who is not on the team is rejected
+      const badAssignee = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Bad assignee',
+          teamId,
+          assignedToId: stranger.userId,
+        });
+      expect(badAssignee.status).toBe(400);
+
+      // Non-member cannot attach a foreign team
+      const foreignTeam = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(stranger.token!))
+        .send({ title: 'No access', teamId });
+      expect(foreignTeam.status).toBe(403);
+
+      // Member can see the team task
+      const memberList = await request(app)
+        .get(`${API}/tasks`)
+        .set(authHeader(member.token!));
+      expect(memberList.status).toBe(200);
+      expect(memberList.body.data.some((t: { id: string }) => t.id === created.body.data.id)).toBe(
+        true
+      );
+
+      const byTeam = await request(app)
+        .get(`${API}/tasks`)
+        .query({ teamId })
+        .set(authHeader(token));
+      expect(byTeam.status).toBe(200);
+      expect(byTeam.body.data).toHaveLength(1);
+      expect(byTeam.body.data[0].title).toBe('Team task');
+
+      const byAssignee = await request(app)
+        .get(`${API}/tasks`)
+        .query({ assignedToId: member.userId })
+        .set(authHeader(token));
+      expect(byAssignee.status).toBe(200);
+      expect(byAssignee.body.data).toHaveLength(1);
+
+      // Clear team + assignee
+      const cleared = await request(app)
+        .put(`${API}/tasks/${created.body.data.id}`)
+        .set(authHeader(token))
+        .send({ teamId: null, assignedToId: null });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.data.teamId).toBeNull();
+      expect(cleared.body.data.assignedToId).toBeNull();
+    });
   });
 
   describe('Teams', () => {

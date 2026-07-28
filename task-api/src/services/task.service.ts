@@ -1,5 +1,7 @@
 import type { Task, TaskStatus, Priority } from '@prisma/client';
 import taskRepository from '../repositories/task.repository';
+import teamRepository from '../repositories/team.repository';
+import userRepository from '../repositories/user.repository';
 import { AppError } from '../middleware/error.middleware';
 import { CreateTaskDto, UpdateTaskDto } from '../types';
 
@@ -7,6 +9,8 @@ export interface ListTasksQuery {
   status?: string;
   priority?: string;
   search?: string;
+  teamId?: string;
+  assignedToId?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -14,6 +18,8 @@ export interface ListTasksQuery {
 
 const TASK_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE', 'CANCELLED'];
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseStatus(value?: string): TaskStatus | undefined {
   if (!value) return undefined;
@@ -37,6 +43,15 @@ function parseSort(value?: string): 'dueDate' | 'updatedAt' | undefined {
   throw new AppError(400, 'Invalid sort. Allowed: dueDate, updatedAt');
 }
 
+function parseOptionalUuid(value: string | undefined, field: string): string | undefined {
+  if (!value?.trim()) return undefined;
+  const id = value.trim();
+  if (!UUID_RE.test(id)) {
+    throw new AppError(400, `${field} must be a valid UUID`);
+  }
+  return id;
+}
+
 export class TaskService {
   async list(userId: string, query: ListTasksQuery): Promise<{
     tasks: Task[];
@@ -44,12 +59,23 @@ export class TaskService {
   }> {
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 20;
+    const teamId = parseOptionalUuid(query.teamId, 'teamId');
+    const assignedToId = parseOptionalUuid(query.assignedToId, 'assignedToId');
+
+    if (teamId) {
+      const membership = await teamRepository.findMembership(teamId, userId);
+      if (!membership) {
+        throw new AppError(403, 'You are not a member of this team');
+      }
+    }
 
     const { tasks, total } = await taskRepository.findForUser({
       userId,
       status: parseStatus(query.status),
       priority: parsePriority(query.priority),
       search: query.search?.trim() || undefined,
+      teamId,
+      assignedToId,
       page,
       limit,
       sort: parseSort(query.sort),
@@ -71,7 +97,7 @@ export class TaskService {
     if (!task) {
       throw new AppError(404, 'Task not found');
     }
-    this.assertCanAccess(userId, task);
+    await this.assertCanAccess(userId, task);
     return task;
   }
 
@@ -82,6 +108,10 @@ export class TaskService {
 
     const priority = data.priority ? parsePriority(data.priority) : 'MEDIUM';
     const status = data.status ? parseStatus(data.status) : 'TODO';
+    const teamId = data.teamId?.trim() || undefined;
+    const assignedToId = data.assignedToId?.trim() || undefined;
+
+    await this.validateTeamAndAssignee(userId, teamId, assignedToId);
 
     return taskRepository.create({
       title: data.title.trim(),
@@ -90,7 +120,8 @@ export class TaskService {
       status,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       createdBy: { connect: { id: userId } },
-      ...(data.assignedToId ? { assignedTo: { connect: { id: data.assignedToId } } } : {}),
+      ...(teamId ? { team: { connect: { id: teamId } } } : {}),
+      ...(assignedToId ? { assignedTo: { connect: { id: assignedToId } } } : {}),
     });
   }
 
@@ -101,6 +132,21 @@ export class TaskService {
     }
     this.assertCanModify(userId, existing);
 
+    const nextTeamId =
+      data.teamId !== undefined ? data.teamId?.trim() || null : existing.teamId;
+    const nextAssignedToId =
+      data.assignedToId !== undefined
+        ? data.assignedToId?.trim() || null
+        : existing.assignedToId;
+
+    if (data.teamId !== undefined || data.assignedToId !== undefined) {
+      await this.validateTeamAndAssignee(
+        userId,
+        nextTeamId || undefined,
+        nextAssignedToId || undefined
+      );
+    }
+
     return taskRepository.update(taskId, {
       ...(data.title !== undefined ? { title: data.title.trim() } : {}),
       ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
@@ -109,9 +155,14 @@ export class TaskService {
       ...(data.dueDate !== undefined
         ? { dueDate: data.dueDate ? new Date(data.dueDate) : null }
         : {}),
+      ...(data.teamId !== undefined
+        ? data.teamId
+          ? { team: { connect: { id: data.teamId.trim() } } }
+          : { team: { disconnect: true } }
+        : {}),
       ...(data.assignedToId !== undefined
         ? data.assignedToId
-          ? { assignedTo: { connect: { id: data.assignedToId } } }
+          ? { assignedTo: { connect: { id: data.assignedToId.trim() } } }
           : { assignedTo: { disconnect: true } }
         : {}),
     });
@@ -126,10 +177,48 @@ export class TaskService {
     await taskRepository.delete(taskId);
   }
 
-  private assertCanAccess(userId: string, task: Task): void {
-    if (task.createdById !== userId && task.assignedToId !== userId) {
-      throw new AppError(403, 'You do not have access to this task');
+  private async validateTeamAndAssignee(
+    actorUserId: string,
+    teamId?: string,
+    assignedToId?: string
+  ): Promise<void> {
+    if (teamId) {
+      const team = await teamRepository.findById(teamId);
+      if (!team) {
+        throw new AppError(404, 'Team not found');
+      }
+      const membership = await teamRepository.findMembership(teamId, actorUserId);
+      if (!membership) {
+        throw new AppError(403, 'You must be a member of the team to attach tasks to it');
+      }
     }
+
+    if (assignedToId) {
+      const assignee = await userRepository.findById(assignedToId);
+      if (!assignee || !assignee.isActive) {
+        throw new AppError(404, 'Assignee not found');
+      }
+
+      if (teamId) {
+        const assigneeMembership = await teamRepository.findMembership(teamId, assignedToId);
+        if (!assigneeMembership) {
+          throw new AppError(400, 'Assignee must be a member of the selected team');
+        }
+      }
+    }
+  }
+
+  private async assertCanAccess(userId: string, task: Task): Promise<void> {
+    if (task.createdById === userId || task.assignedToId === userId) {
+      return;
+    }
+    if (task.teamId) {
+      const membership = await teamRepository.findMembership(task.teamId, userId);
+      if (membership) {
+        return;
+      }
+    }
+    throw new AppError(403, 'You do not have access to this task');
   }
 
   private assertCanModify(userId: string, task: Task): void {
