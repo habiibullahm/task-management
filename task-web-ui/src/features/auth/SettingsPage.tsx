@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { handleApiError } from '@/services/api';
 import { authService } from '@/services/auth.service';
+import { copyWithToast } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,14 @@ export function SettingsPage() {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleCopyUserId = async () => {
+    if (!user?.id) {
+      toast.error('User ID not available yet — refresh the page');
+      return;
+    }
+    await copyWithToast(user.id, 'User ID copied');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,7 +73,52 @@ export function SettingsPage() {
         </div>
       </header>
 
-      <main className="container mx-auto max-w-lg px-4 py-8">
+      <main className="container mx-auto max-w-lg space-y-6 px-4 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+            <CardDescription>
+              Share your User ID so teammates can add you to a team.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Name</p>
+              <p className="text-sm text-muted-foreground">
+                {user?.firstName} {user?.lastName}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Email</p>
+              <p className="text-sm text-muted-foreground">{user?.email ?? '—'}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="userId">User ID</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="userId"
+                  readOnly
+                  value={user?.id ?? 'Loading…'}
+                  className="font-mono text-xs sm:text-sm"
+                  aria-label="Your user ID"
+                  onFocus={(e) => e.target.select()}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCopyUserId}
+                  disabled={!user?.id}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Paste this ID in Team → Add member when inviting someone.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Change password</CardTitle>

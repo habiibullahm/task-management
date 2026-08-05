@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskStore } from '@/stores/task.store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { NotificationBell } from '@/components/NotificationBell';
 import { TaskStatus } from '@/types';
 import type { TaskStatus as TaskStatusType } from '@/types';
 
@@ -50,6 +50,7 @@ export function Dashboard() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <h1 className="text-2xl font-bold">Task Management</h1>
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <span className="text-sm text-muted-foreground">
               {user?.firstName} {user?.lastName}
             </span>
@@ -129,21 +130,20 @@ export function Dashboard() {
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Get started with these common tasks</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Button className="w-full" onClick={() => navigate('/tasks/new')}>
                 Create Task
               </Button>
               <Button className="w-full" variant="outline" onClick={() => navigate('/tasks')}>
                 My Tasks
               </Button>
+              <Button className="w-full" variant="outline" onClick={() => navigate('/boards')}>
+                Kanban Board
+              </Button>
               <Button className="w-full" variant="outline" onClick={() => navigate('/settings')}>
                 Settings
               </Button>
-              <Button
-                className="w-full sm:col-span-2 lg:col-span-1"
-                variant="outline"
-                onClick={() => toast.message('Teams coming in a later release')}
-              >
+              <Button className="w-full" variant="outline" onClick={() => navigate('/teams')}>
                 Manage Teams
               </Button>
             </CardContent>

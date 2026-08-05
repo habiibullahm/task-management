@@ -4,14 +4,15 @@ A collaborative task management dashboard application built with Node.js, TypeSc
 
 ## 🚀 Features
 
-- **Multi-user Collaboration**: Support for multiple users working together
-- **Team Management**: Create and manage teams with role-based access
-- **Task Management**: Full CRUD operations for tasks with status tracking
-- **Real-time Updates**: Built with scalability for real-time status updates
-- **JWT Authentication**: Secure authentication with access and refresh tokens
-- **RESTful API**: Clean, well-structured API following REST principles
-- **Database ORM**: Prisma for type-safe database operations
-- **Docker Support**: Containerized application for easy deployment
+- **JWT Authentication**: Register, login, refresh, profile, change/forgot/reset password
+- **Task Management**: Full CRUD with status, priority, search, sort, and pagination
+- **Team Collaboration**: Team CRUD, member roles (OWNER/ADMIN/MEMBER), task `teamId` / assignee
+- **Comments**: Task discussion threads with author edit/delete
+- **Real-time Updates**: Socket.IO notifications for task and comment events
+- **RESTful API**: Layered routes → controllers → services → repositories
+- **Database ORM**: Prisma + PostgreSQL
+- **Docker Support**: Dev and production Compose files
+- **Integration Tests**: Jest + Supertest against a real database
 
 ## 📋 Prerequisites
 
@@ -165,35 +166,65 @@ The API will be available at `http://localhost:3000/api/v1`
 
 ## 🔐 API Endpoints
 
+Base path: `/api/v1`. See [docs/API_DOCUMENTATION.md](./docs/API_DOCUMENTATION.md) for request/response details.
+
+### Health
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/health` | Liveness + DB ping (`ok` / `degraded`) | No |
+
 ### Authentication
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/v1/auth/register` | Register a new user | No |
-| POST | `/api/v1/auth/login` | Login user | No |
-| POST | `/api/v1/auth/refresh` | Refresh access token | No |
-| GET | `/api/v1/auth/profile` | Get current user profile | Yes |
-| POST | `/api/v1/auth/logout` | Logout user | Yes |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/auth/register` | Register a new user | No |
+| POST | `/auth/login` | Login | No |
+| POST | `/auth/refresh` | Refresh access token | No |
+| GET | `/auth/profile` | Current user profile | Yes |
+| POST | `/auth/logout` | Logout (client clears tokens) | Yes |
+| POST | `/auth/change-password` | Change password while signed in | Yes |
+| POST | `/auth/forgot-password` | Request password-reset email | No |
+| POST | `/auth/reset-password` | Reset password with one-time token | No |
 
-### Tasks (Coming Soon)
+### Tasks
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/tasks` | Get all tasks | Yes |
-| POST | `/api/v1/tasks` | Create a new task | Yes |
-| GET | `/api/v1/tasks/:id` | Get task by ID | Yes |
-| PUT | `/api/v1/tasks/:id` | Update task | Yes |
-| DELETE | `/api/v1/tasks/:id` | Delete task | Yes |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/tasks` | List tasks (filters: `status`, `priority`, `search`, `sort`, `teamId`, `assignedToId`) | Yes |
+| POST | `/tasks` | Create task (`teamId`, `assignedToId` optional) | Yes |
+| GET | `/tasks/:id` | Get task | Yes |
+| PUT | `/tasks/:id` | Update task | Yes |
+| DELETE | `/tasks/:id` | Delete task | Yes |
+| GET | `/tasks/:id/comments` | List comments on a task | Yes |
 
-### Teams (Coming Soon)
+### Teams
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/teams` | Get all teams | Yes |
-| POST | `/api/v1/teams` | Create a new team | Yes |
-| GET | `/api/v1/teams/:id` | Get team by ID | Yes |
-| PUT | `/api/v1/teams/:id` | Update team | Yes |
-| DELETE | `/api/v1/teams/:id` | Delete team | Yes |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/teams` | List teams you belong to | Yes |
+| POST | `/teams` | Create team (creator becomes OWNER) | Yes |
+| GET | `/teams/:id` | Get team | Yes |
+| PUT | `/teams/:id` | Update team (OWNER/ADMIN) | Yes |
+| DELETE | `/teams/:id` | Delete team (OWNER) | Yes |
+| GET | `/teams/:id/members` | List members | Yes |
+| POST | `/teams/:id/members` | Add member (OWNER/ADMIN) | Yes |
+| PUT | `/teams/:id/members/:memberId` | Update member role (OWNER) | Yes |
+| DELETE | `/teams/:id/members/:memberId` | Remove member (OWNER/ADMIN) | Yes |
+
+### Comments
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/comments` | Create comment (`taskId`, `content`) | Yes |
+| PUT | `/comments/:id` | Update own comment | Yes |
+| DELETE | `/comments/:id` | Delete own comment | Yes |
+
+### Realtime (Socket.IO)
+
+- Path: `/socket.io`
+- Auth: access token via `auth.token` (or `Authorization: Bearer`)
+- Event: `notification` — `task:created` / `task:updated` / `task:deleted` / `comment:created`
 
 ## 📊 Database Schema
 

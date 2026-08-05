@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authRoutes from './auth.routes';
 import taskRoutes from './task.routes';
 import teamRoutes from './team.routes';
+import commentRoutes from './comment.routes';
 import { prisma } from '../config/database';
 import { MailerUtil } from '../utils/mailer.util';
 
@@ -34,5 +35,6 @@ router.get('/health', async (_req, res) => {
 router.use('/auth', authRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/teams', teamRoutes);
+router.use('/comments', commentRoutes);
 
 export default router;

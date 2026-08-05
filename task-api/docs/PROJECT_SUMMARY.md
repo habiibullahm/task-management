@@ -1,257 +1,94 @@
 # Task Management API - Project Summary
 
-## 📦 Project Overview
+## Project Overview
 
-A complete, production-ready scaffolding for a collaborative task management application built with modern technologies and best practices.
+Collaborative task management API built with Node.js, TypeScript, Express, Prisma, and PostgreSQL. Auth, tasks, teams, comments, and Socket.IO realtime are implemented and covered by integration tests.
 
-## ✅ Completed Deliverables
+## Completed Deliverables
 
-### 1. Project Structure ✓
-- **Organized folder structure** following industry best practices
-- **Layered architecture**: Controllers → Services → Repositories
-- **Separation of concerns** with dedicated folders for middleware, routes, config, utils, and types
-- **TypeScript** throughout the entire codebase
+### 1. Project Structure
+- Layered architecture: Controllers → Services → Repositories
+- Dedicated middleware, routes, config, utils, types, realtime
 
-### 2. Configuration Files ✓
-- **package.json**: All necessary dependencies configured
-- **tsconfig.json**: TypeScript configuration with path aliases
-- **nodemon.json**: Development server with hot reload
-- **.env & .env.example**: Environment variable templates
-- **.gitignore**: Proper exclusions for node_modules, dist, env files
-- **.dockerignore**: Optimized Docker builds
+### 2. Configuration
+- TypeScript, nodemon, env templates, Docker ignore/gitignore
 
-### 3. Database Setup ✓
-- **Prisma ORM** fully configured
-- **Complete schema** with:
-  - User model (authentication & profiles)
-  - Team model (team management)
-  - TeamMember model (membership with roles)
-  - Task model (task management with status & priority)
-  - Comment model (task discussions)
-  - ActivityLog model (audit trail)
-- **Enums** for UserRole, TeamMemberRole, TaskStatus, Priority
-- **Relationships** properly defined with cascading deletes
+### 3. Database (Prisma)
+- Models: User, PasswordResetToken, Team, TeamMember, Task, Comment, ActivityLog
+- Enums: UserRole, TeamMemberRole, TaskStatus, Priority
 
-### 4. Authentication System ✓
-- **JWT-based authentication** with access and refresh tokens
-- **Password hashing** using bcryptjs
-- **Password strength validation**
-- **Auth middleware** for protecting routes
-- **Role-based authorization** middleware
-- **Complete auth endpoints**:
-  - POST /auth/register
-  - POST /auth/login
-  - POST /auth/refresh
-  - GET /auth/profile
-  - POST /auth/logout
+### 4. Authentication
+- JWT access + refresh tokens, bcrypt passwords
+- Endpoints: register, login, refresh, profile, logout, change-password, forgot-password, reset-password
+- `AuthMiddleware.authorize` exists but is not wired to admin user-management APIs yet
 
-### 5. API Layer ✓
-- **Express.js** application setup
-- **RESTful API** structure
-- **Middleware stack**:
-  - CORS configuration
-  - Body parsing
-  - Request logging (Morgan)
-  - Security headers
-  - Error handling
-  - Validation (express-validator)
-- **Route organization** with modular routing
-- **Health check endpoint**
+### 5. Domain APIs
+- **Tasks**: CRUD + filters (`status`, `priority`, `search`, `sort`, `teamId`, `assignedToId`) with team/assignee validation
+- **Teams**: CRUD + members (OWNER / ADMIN / MEMBER)
+- **Comments**: nested list on task; create/update/delete with author checks
+- **Realtime**: Socket.IO fan-out for task/comment events
 
-### 6. Utilities & Helpers ✓
-- **JWT utilities**: Token generation and verification
-- **Password utilities**: Hashing and validation
-- **Response utilities**: Standardized API responses
-- **Environment configuration**: Type-safe env variable access
-- **Database singleton**: Prisma client management
+### 6. API Layer
+- Express, CORS, validation, centralized errors, Morgan logging, health check with DB ping
 
-### 7. Docker Configuration ✓
-- **Multi-stage Dockerfile** for optimized production builds
-- **docker-compose.yml** for production deployment
-- **docker-compose.dev.yml** for local development
-- **Services included**:
-  - PostgreSQL database
-  - Application container
-  - pgAdmin (database management UI)
-- **Health checks** configured
-- **Volume persistence** for database data
+### 7. Docker & Docs
+- Dev/prod Compose, Dockerfile
+- README, SETUP, API_DOCUMENTATION, this summary
+- Jest + Supertest integration suite
 
-### 8. Documentation ✓
-- **README.md**: Comprehensive project documentation
-- **SETUP.md**: Quick start guide with step-by-step instructions
-- **API_DOCUMENTATION.md**: Complete API reference
-- **PROJECT_SUMMARY.md**: This file
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Client Layer                        │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                   Routes Layer                          │
-│  (Endpoint definitions, validation, middleware)         │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                 Controller Layer                        │
-│  (Request/Response handling, HTTP logic)                │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Service Layer                          │
-│  (Business logic, validation, orchestration)            │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                Repository Layer                         │
-│  (Data access, database operations)                     │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Database (PostgreSQL)                  │
-└─────────────────────────────────────────────────────────┘
+Client → Routes → Controllers → Services → Repositories → PostgreSQL
+                                      ↘ Socket.IO notifications
 ```
 
-## 📂 File Structure
+## File Structure (high level)
 
 ```
-task-management-api/
+task-api/
 ├── src/
 │   ├── config/
-│   │   ├── database.ts          # Prisma client singleton
-│   │   └── env.ts                # Environment configuration
-│   ├── controllers/
-│   │   ├── auth.controller.ts    # ✅ Implemented
-│   │   ├── task.controller.ts    # 🔜 Ready for implementation
-│   │   └── team.controller.ts    # 🔜 Ready for implementation
+│   ├── controllers/     # auth, task, team, comment
 │   ├── services/
-│   │   ├── auth.service.ts       # ✅ Implemented
-│   │   ├── task.service.ts       # 🔜 Ready for implementation
-│   │   └── team.service.ts       # 🔜 Ready for implementation
 │   ├── repositories/
-│   │   ├── user.repository.ts    # ✅ Implemented
-│   │   ├── task.repository.ts    # 🔜 Ready for implementation
-│   │   └── team.repository.ts    # 🔜 Ready for implementation
 │   ├── middleware/
-│   │   ├── auth.middleware.ts    # ✅ Authentication & authorization
-│   │   ├── error.middleware.ts   # ✅ Global error handling
-│   │   └── validation.middleware.ts # ✅ Request validation
 │   ├── routes/
-│   │   ├── index.ts              # ✅ Main router
-│   │   ├── auth.routes.ts        # ✅ Auth endpoints
-│   │   ├── task.routes.ts        # 🔜 Task endpoints (placeholder)
-│   │   └── team.routes.ts        # 🔜 Team endpoints (placeholder)
+│   ├── realtime/        # Socket.IO hub
 │   ├── types/
-│   │   └── index.ts              # ✅ TypeScript interfaces & DTOs
 │   ├── utils/
-│   │   ├── jwt.util.ts           # ✅ JWT operations
-│   │   ├── password.util.ts      # ✅ Password hashing & validation
-│   │   └── response.util.ts      # ✅ Standardized responses
-│   ├── app.ts                    # ✅ Express app configuration
-│   └── server.ts                 # ✅ Server entry point
+│   ├── app.ts
+│   └── server.ts
 ├── prisma/
-│   ├── schema.prisma             # ✅ Complete database schema
-│   └── migrations/               # Database migrations
-├── Dockerfile                    # ✅ Production container
-├── docker-compose.yml            # ✅ Production deployment
-├── docker-compose.dev.yml        # ✅ Development environment
-├── tsconfig.json                 # ✅ TypeScript configuration
-├── nodemon.json                  # ✅ Dev server configuration
-├── package.json                  # ✅ Dependencies & scripts
-├── .env                          # ✅ Environment variables
-├── .env.example                  # ✅ Environment template
-├── .gitignore                    # ✅ Git exclusions
-├── README.md                     # ✅ Main documentation
-├── SETUP.md                      # ✅ Setup guide
-└── API_DOCUMENTATION.md          # ✅ API reference
+├── tests/
+└── docs/
 ```
 
-## 🚀 Quick Start Commands
+## Optional polish (deferred)
 
-```bash
-# Install dependencies
-npm install
+1. Profile name/email update endpoint
+2. Email verification
+3. Server-side token revocation
+4. File attachments
+5. ActivityLog API / feed
+6. Admin user-management using `authorize(...)`
 
-# Start database (Docker)
-docker-compose -f docker-compose.dev.yml up -d
-
-# Run migrations
-npm run prisma:migrate
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
-## 🎯 Next Steps for Development
-
-1. **Implement Task Management**:
-   - Complete task.repository.ts
-   - Complete task.service.ts
-   - Complete task.controller.ts
-   - Add task routes with validation
-
-2. **Implement Team Management**:
-   - Complete team.repository.ts
-   - Complete team.service.ts
-   - Complete team.controller.ts
-   - Add team routes with validation
-
-3. **Add Advanced Features**:
-   - Real-time updates (WebSocket/Socket.io)
-   - File uploads for task attachments
-   - Email notifications
-   - Activity feed
-   - Search functionality
-   - Pagination helpers
-
-4. **Testing**:
-   - Unit tests (Jest)
-   - Integration tests
-   - E2E tests
-
-5. **DevOps**:
-   - CI/CD pipeline
-   - Monitoring & logging
-   - Performance optimization
-   - Security hardening
-
-## 📊 Technology Decisions
+## Technology Decisions
 
 | Aspect | Technology | Reason |
 |--------|-----------|--------|
-| Runtime | Node.js | JavaScript ecosystem, async I/O |
-| Language | TypeScript | Type safety, better DX |
-| Framework | Express.js | Mature, flexible, large ecosystem |
-| Database | PostgreSQL | Relational data, ACID compliance |
-| ORM | Prisma | Type-safe, modern, great DX |
-| Auth | JWT | Stateless, scalable |
+| Runtime | Node.js | Async I/O |
+| Language | TypeScript | Type safety |
+| Framework | Express.js | Flexible, mature |
+| Database | PostgreSQL | Relational + ACID |
+| ORM | Prisma | Type-safe DX |
+| Auth | JWT | Stateless |
+| Realtime | Socket.IO | JWT handshake + rooms |
 | Validation | express-validator | Express integration |
-| Container | Docker | Consistency, portability |
+| Container | Docker | Consistency |
 
-## ✨ Key Features
+## Project Status
 
-- ✅ **Type Safety**: Full TypeScript coverage
-- ✅ **Security**: JWT auth, password hashing, CORS, security headers
-- ✅ **Validation**: Request validation with express-validator
-- ✅ **Error Handling**: Centralized error handling with custom error classes
-- ✅ **Logging**: Request logging with Morgan
-- ✅ **Database**: Type-safe queries with Prisma
-- ✅ **Docker**: Containerized for easy deployment
-- ✅ **Documentation**: Comprehensive docs for setup and API usage
-- ✅ **Scalability**: Layered architecture for easy scaling
-- ✅ **Best Practices**: Following Node.js and Express.js best practices
+**Shipped** for training/portfolio use: auth, tasks, teams, comments, and realtime notifications are implemented.
 
-## 🎉 Project Status
-
-**Status**: ✅ **COMPLETE SCAFFOLDING - READY FOR DEVELOPMENT**
-
-All core infrastructure is in place. The authentication system is fully functional. Task and team management endpoints are ready to be implemented following the established patterns.
-
+Remaining items above are polish/deferred — not scaffolding placeholders.

@@ -1,6 +1,6 @@
 # Task Management
 
-A simple personal task manager you can open in the browser: sign up, capture work, track status, and see what’s on your plate — without enterprise project-tool clutter.
+Full-stack task manager: personal tasks, teams, Kanban board, comments, and live notifications — built as a training / portfolio app with real auth, Postgres, CI, and cloud deploy.
 
 **Live demo**
 
@@ -12,14 +12,22 @@ A simple personal task manager you can open in the browser: sign up, capture wor
 
 ## What this project is for
 
-**For:** individuals who need a private place to manage their own to-dos (study, work, daily life).  
-**Not for (yet):** team boards, shared workspaces, or heavy project planning — those are deferred.
+**For:** individuals and small teams managing to-dos in the browser.  
+**Includes:** JWT auth, personal + team tasks, comments, Kanban drag-and-drop, Socket.IO notifications.
 
-**v1 includes:** JWT register/login, personal task CRUD + status, dashboard stats from your tasks.  
-**Week 2 harden (personal product):** change password, forgot/reset (hashed single-use tokens; SMTP or optional Resend), task list filters (status incl. Cancelled, priority, search, sort), dual empty states, dashboard → filtered tasks, DB health ping (`ok`/`degraded`), demo seed script, deploy docs.  
-**Coming later:** Teams UI.
+**Shipped:**
 
-Built as a full-stack training / portfolio app to practice real product flow: auth, CRUD, Postgres, CI, and cloud deploy — while still solving a concrete user need.
+- Auth: register/login/refresh, change password, forgot/reset
+- Tasks: CRUD, filters/search/sort, team + assignee
+- Teams: CRUD + members (invite by User ID from Settings)
+- Comments on task detail
+- Kanban board (`/boards`) with `@dnd-kit`
+- Realtime toasts + notification bell
+- CI + Render deploy docs
+
+**Deferred polish:** dark-mode toggle, profile name/email edit, email verification, token revocation, file attachments, ActivityLog feed, admin RBAC APIs.
+
+Built to practice real product flow: auth, CRUD, Postgres, CI, and cloud deploy — while solving a concrete user need.
 
 ### Problem (why it exists)
 
@@ -29,18 +37,17 @@ Built as a full-stack training / portfolio app to practice real product flow: au
 | Big tools (Jira, Notion-heavy setups) | Too much setup for personal lists |
 | Spreadsheet / sticky-note chaos | No clear status, no ownership, hard to revisit |
 
-Users need a **fast path**: account → list → create → update status → done — with data that survives refresh and stays private to them.
+Users need a **fast path**: account → list → create → update status → done — with data that survives refresh.
 
 ### Solution (what we ship)
 
 | User need | How the app helps |
 |-----------|-------------------|
-| Keep tasks in one place | Dashboard + My Tasks backed by Postgres |
-| Know what’s open vs done | Status on each task (e.g. todo → in progress → done) |
-| Stay private | Register/login; JWT; you only see **your** tasks |
-| Use it from any browser | Web UI + REST API (local or live Render demo) |
-
-**Outcome for the user:** open the app, add what matters, update status as you work, and leave with a clear personal backlog — not another blank productivity template.
+| Keep tasks in one place | Dashboard + My Tasks + Kanban |
+| Know what’s open vs done | Status on each task (todo → in progress → done) |
+| Collaborate lightly | Teams, assignees, comments, live notifications |
+| Stay signed in securely | Register/login; JWT; ownership + team membership checks |
+| Use it from any browser | Web UI + REST API (+ Socket.IO) |
 
 ## Project flow
 
@@ -48,76 +55,71 @@ Users need a **fast path**: account → list → create → update status → do
 
 ```
 Browser (task-web-ui)
-    │  HTTPS / JSON
+    │  HTTPS / JSON + Socket.IO
     ▼
 Express API (task-api)  ──JWT auth──► protected routes
     │
     │  Prisma ORM
     ▼
-PostgreSQL (users, tasks, …)
+PostgreSQL (users, tasks, teams, comments, …)
 ```
 
-1. The **UI** (Vite + React) talks only to the API via `VITE_API_BASE_URL` (Axios).
-2. The **API** validates input, checks JWT on protected routes, runs business logic, and reads/writes via **Prisma**.
-3. **Postgres** stores users and tasks. Migrations apply on deploy (`prisma migrate deploy`).
+1. The **UI** talks to the API via `VITE_API_BASE_URL` (Axios) and `VITE_WS_URL` (Socket.IO).
+2. The **API** validates input, checks JWT, runs business logic, and reads/writes via **Prisma**.
+3. **Postgres** stores users, tasks, teams, and comments. Migrations apply on deploy.
 
 ### Request path (API layers)
 
 ```
 Route → Middleware (auth / validation)
      → Controller
-     → Service (business rules)
+     → Service (business rules + realtime emit)
      → Repository (Prisma)
      → PostgreSQL
 ```
 
-Same shape for auth and tasks. Controllers stay thin; ownership checks (e.g. you only see your tasks) live in the service layer.
-
-### User journey (v1)
+### User journey
 
 ```
 /register or /login
         │
         ▼
-  JWT saved in browser (auth store)
+  JWT saved in browser (auth store) + Socket.IO connect
         │
         ▼
-   /dashboard  ←── task counts / quick actions
+   /dashboard  ←── stats / quick actions / notifications
         │
-        ├── Create Task → /tasks/new → POST /api/v1/tasks → back to list
-        │
-        └── My Tasks → /tasks
-                │
-                ├── open /tasks/:id → edit (PUT) or change status
-                └── delete (DELETE)
+        ├── Create Task → /tasks/new
+        ├── My Tasks → /tasks (filters, comments on edit)
+        ├── Kanban → /boards (drag status)
+        └── Teams → /teams
 ```
 
 | Step | UI | API |
 |------|----|-----|
 | Sign up / sign in | `/register`, `/login` | `POST /auth/register`, `POST /auth/login` |
-| Stay signed in | `ProtectedRoute` + stored tokens | `Authorization: Bearer <access>` |
-| Dashboard | `/dashboard` | `GET /tasks` (stats derived in UI) |
-| Create / edit | `/tasks/new`, `/tasks/:id` | `POST /tasks`, `PUT /tasks/:id` |
-| List / delete | `/tasks` | `GET /tasks`, `DELETE /tasks/:id` |
-
-Unauthenticated users hitting protected routes are redirected to `/login`. Expired access tokens trigger refresh (or logout) via the Axios client.
+| Stay signed in | `ProtectedRoute` + tokens | `Authorization: Bearer <access>` |
+| Dashboard | `/dashboard` | `GET /tasks` |
+| Tasks | `/tasks`, `/tasks/new`, `/tasks/:id` | Task CRUD + comments |
+| Board | `/boards` | Task status updates |
+| Teams | `/teams` | Team CRUD + members |
 
 ### Data ownership
 
-- Each task belongs to the authenticated user (creator).
-- List/get/update/delete only succeed for that user’s tasks.
-- Teams / shared workspaces are in the schema for later; **v1 UI is personal tasks only**.
+- Task creator can modify/delete; assignees and team members can view.
+- Team actions respect OWNER / ADMIN / MEMBER roles.
+- Comments: any task-accessible user can post; only the author can edit/delete.
 
 ### Dev → prod flow
 
 ```
 feature/* branch
     → PR + GitHub Actions CI (build / tests)
-    → merge to main
+    → merge to main (or staging)
     → Render redeploy (API + static UI + Postgres)
 ```
 
-Locally: run API + UI with `npm run dev`, smoke-test the journey above, then push. Production UI must be rebuilt when `VITE_API_BASE_URL` changes (Vite bakes it in at build time).
+Locally: run API + UI with `npm run dev`, smoke-test the journey above, then push. Production UI must be rebuilt when `VITE_API_BASE_URL` / `VITE_WS_URL` change.
 
 ## Stack
 
@@ -138,19 +140,19 @@ task-management/
 │   │   ├── controllers/   # Request handlers
 │   │   ├── services/      # Business logic
 │   │   ├── repositories/  # Prisma data access
+│   │   ├── realtime/      # Socket.IO hub
 │   │   └── middleware/    # Auth, validation, errors
 │   └── prisma/            # Schema + migrations
 ├── task-web-ui/       # Vite React SPA
 │   └── src/
-│       ├── features/      # auth, dashboard, tasks
-│       ├── services/      # API client wrappers
-│       └── components/    # Shared UI + ProtectedRoute
+│       ├── features/      # auth, dashboard, tasks, teams, boards
+│       ├── services/      # API clients + realtime
+│       └── components/    # Shared UI, ProtectedRoute, notifications
 ├── .github/           # CI
 ├── render.yaml        # Render Blueprint
 ├── DEPLOY.md          # Production deploy notes
 └── TESTING.md         # Integration & e2e how-to
 ```
-
 ## Prerequisites
 
 - Node.js 18+
@@ -193,7 +195,7 @@ npm run dev
 
 UI: http://localhost:5173
 
-Smoke path: register → Create Task → My Tasks → change status → edit → delete.
+Smoke path: register → Create Task → My Tasks → Board (drag status) → Teams → comment on a task.
 
 ## API overview
 
@@ -202,8 +204,11 @@ Base path: `/api/v1`
 | Area | Endpoints |
 |------|-----------|
 | Health | `GET /health` |
-| Auth | `POST /auth/register`, `POST /auth/login`, refresh / me / logout |
-| Tasks | `GET`, `POST /tasks` · `GET`, `PUT`, `DELETE /tasks/:id` |
+| Auth | register, login, refresh, profile, logout, change/forgot/reset password |
+| Tasks | CRUD + filters; `GET /tasks/:id/comments` |
+| Teams | CRUD + members |
+| Comments | `POST/PUT/DELETE /comments` |
+| Realtime | Socket.IO `/socket.io` |
 
 See `task-api/docs/API_DOCUMENTATION.md` for details.
 

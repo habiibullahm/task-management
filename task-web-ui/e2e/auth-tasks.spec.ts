@@ -109,7 +109,8 @@ test.describe('Dashboard', () => {
 
     await page.goto('/dashboard');
     await page.getByRole('button', { name: 'Manage Teams' }).click();
-    await expect(page.getByText(/teams coming/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/teams\/?$/);
+    await expect(page.getByRole('heading', { name: 'My Teams' })).toBeVisible();
   });
 });
 

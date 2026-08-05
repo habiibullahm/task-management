@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { AuthMiddleware } from '../middleware/auth.middleware';
 import { ValidationMiddleware } from '../middleware/validation.middleware';
 import taskController from '../controllers/task.controller';
+import commentController from '../controllers/comment.controller';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ const createValidation = [
     .withMessage('Invalid priority'),
   body('dueDate').optional({ nullable: true }).isISO8601().withMessage('dueDate must be ISO8601'),
   body('assignedToId').optional({ nullable: true }).isUUID().withMessage('assignedToId must be a UUID'),
+  body('teamId').optional({ nullable: true }).isUUID().withMessage('teamId must be a UUID'),
 ];
 
 const updateValidation = [
@@ -36,10 +38,12 @@ const updateValidation = [
     .withMessage('Invalid priority'),
   body('dueDate').optional({ nullable: true }).isISO8601().withMessage('dueDate must be ISO8601'),
   body('assignedToId').optional({ nullable: true }).isUUID().withMessage('assignedToId must be a UUID'),
+  body('teamId').optional({ nullable: true }).isUUID().withMessage('teamId must be a UUID'),
 ];
 
 router.get('/', taskController.list.bind(taskController));
 router.post('/', ValidationMiddleware.validate(createValidation), taskController.create.bind(taskController));
+router.get('/:id/comments', commentController.listByTask.bind(commentController));
 router.get('/:id', taskController.getById.bind(taskController));
 router.put('/:id', ValidationMiddleware.validate(updateValidation), taskController.update.bind(taskController));
 router.delete('/:id', taskController.delete.bind(taskController));

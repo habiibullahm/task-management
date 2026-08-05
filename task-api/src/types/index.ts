@@ -55,6 +55,7 @@ export interface UpdateTaskDto {
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   dueDate?: Date | string | null;
   assignedToId?: string | null;
+  teamId?: string | null;
 }
 
 // Team DTOs
@@ -71,6 +72,20 @@ export interface UpdateTeamDto {
 export interface AddTeamMemberDto {
   userId: string;
   role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
+export interface UpdateTeamMemberDto {
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
+// Comment DTOs
+export interface CreateCommentDto {
+  content: string;
+  taskId: string;
+}
+
+export interface UpdateCommentDto {
+  content: string;
 }
 
 // Pagination

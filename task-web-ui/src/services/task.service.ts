@@ -16,9 +16,9 @@ export interface UpdateTaskData {
   description?: string;
   status?: TaskStatus;
   priority?: Priority;
-  dueDate?: string;
-  assignedToId?: string;
-  teamId?: string;
+  dueDate?: string | null;
+  assignedToId?: string | null;
+  teamId?: string | null;
 }
 
 export interface TaskFilters {

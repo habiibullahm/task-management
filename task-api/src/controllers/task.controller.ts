@@ -18,6 +18,8 @@ export class TaskController {
         status: req.query.status ? String(req.query.status) : undefined,
         priority: req.query.priority ? String(req.query.priority) : undefined,
         search: req.query.search ? String(req.query.search) : undefined,
+        teamId: req.query.teamId ? String(req.query.teamId) : undefined,
+        assignedToId: req.query.assignedToId ? String(req.query.assignedToId) : undefined,
         sort: req.query.sort ? String(req.query.sort) : undefined,
         page: Number.isFinite(page) ? page : undefined,
         limit: Number.isFinite(limit) ? limit : undefined,

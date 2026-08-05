@@ -6,6 +6,8 @@ export interface TaskListParams {
   status?: TaskStatus;
   priority?: Priority;
   search?: string;
+  teamId?: string;
+  assignedToId?: string;
   page?: number;
   limit?: number;
   sort?: 'dueDate' | 'updatedAt';
@@ -22,24 +24,33 @@ const userSelect = {
   updatedAt: true,
 } as const;
 
+const teamSelect = {
+  id: true,
+  name: true,
+  description: true,
+  createdById: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+const taskInclude = {
+  createdBy: { select: userSelect },
+  assignedTo: { select: userSelect },
+  team: { select: teamSelect },
+} as const;
+
 export class TaskRepository {
   async create(data: Prisma.TaskCreateInput): Promise<Task> {
     return prisma.task.create({
       data,
-      include: {
-        createdBy: { select: userSelect },
-        assignedTo: { select: userSelect },
-      },
+      include: taskInclude,
     });
   }
 
   async findById(id: string): Promise<Task | null> {
     return prisma.task.findUnique({
       where: { id },
-      include: {
-        createdBy: { select: userSelect },
-        assignedTo: { select: userSelect },
-      },
+      include: taskInclude,
     });
   }
 
@@ -49,7 +60,11 @@ export class TaskRepository {
     const skip = (page - 1) * limit;
 
     const ownershipFilter: Prisma.TaskWhereInput = {
-      OR: [{ createdById: params.userId }, { assignedToId: params.userId }],
+      OR: [
+        { createdById: params.userId },
+        { assignedToId: params.userId },
+        { team: { members: { some: { userId: params.userId } } } },
+      ],
     };
 
     const searchFilter: Prisma.TaskWhereInput | undefined = params.search
@@ -66,6 +81,8 @@ export class TaskRepository {
         ownershipFilter,
         ...(params.status ? [{ status: params.status }] : []),
         ...(params.priority ? [{ priority: params.priority }] : []),
+        ...(params.teamId ? [{ teamId: params.teamId }] : []),
+        ...(params.assignedToId ? [{ assignedToId: params.assignedToId }] : []),
         ...(searchFilter ? [searchFilter] : []),
       ],
     };
@@ -81,10 +98,7 @@ export class TaskRepository {
         skip,
         take: limit,
         orderBy,
-        include: {
-          createdBy: { select: userSelect },
-          assignedTo: { select: userSelect },
-        },
+        include: taskInclude,
       }),
       prisma.task.count({ where }),
     ]);
@@ -96,10 +110,7 @@ export class TaskRepository {
     return prisma.task.update({
       where: { id },
       data,
-      include: {
-        createdBy: { select: userSelect },
-        assignedTo: { select: userSelect },
-      },
+      include: taskInclude,
     });
   }
 

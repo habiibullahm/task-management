@@ -613,19 +613,405 @@ describe('API + DB integration', () => {
 
       expect(await prisma.task.findUnique({ where: { id: taskId } })).not.toBeNull();
     });
+
+    it('attaches team and assignee with validation and filters', async () => {
+      const member = await registerUser({ firstName: 'Member' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const teamRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token))
+        .send({ name: 'Task Team' });
+      const teamId = teamRes.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: member.userId, role: 'MEMBER' });
+
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Team task',
+          teamId,
+          assignedToId: member.userId,
+        });
+      expect(created.status).toBe(201);
+      expect(created.body.data.teamId).toBe(teamId);
+      expect(created.body.data.assignedToId).toBe(member.userId);
+      expect(created.body.data.team.name).toBe('Task Team');
+
+      // Assignee who is not on the team is rejected
+      const badAssignee = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Bad assignee',
+          teamId,
+          assignedToId: stranger.userId,
+        });
+      expect(badAssignee.status).toBe(400);
+
+      // Non-member cannot attach a foreign team
+      const foreignTeam = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(stranger.token!))
+        .send({ title: 'No access', teamId });
+      expect(foreignTeam.status).toBe(403);
+
+      // Member can see the team task
+      const memberList = await request(app)
+        .get(`${API}/tasks`)
+        .set(authHeader(member.token!));
+      expect(memberList.status).toBe(200);
+      expect(memberList.body.data.some((t: { id: string }) => t.id === created.body.data.id)).toBe(
+        true
+      );
+
+      const byTeam = await request(app)
+        .get(`${API}/tasks`)
+        .query({ teamId })
+        .set(authHeader(token));
+      expect(byTeam.status).toBe(200);
+      expect(byTeam.body.data).toHaveLength(1);
+      expect(byTeam.body.data[0].title).toBe('Team task');
+
+      const byAssignee = await request(app)
+        .get(`${API}/tasks`)
+        .query({ assignedToId: member.userId })
+        .set(authHeader(token));
+      expect(byAssignee.status).toBe(200);
+      expect(byAssignee.body.data).toHaveLength(1);
+
+      // Clear team + assignee
+      const cleared = await request(app)
+        .put(`${API}/tasks/${created.body.data.id}`)
+        .set(authHeader(token))
+        .send({ teamId: null, assignedToId: null });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.data.teamId).toBeNull();
+      expect(cleared.body.data.assignedToId).toBeNull();
+    });
+
+    it('allows assignee and team OWNER/ADMIN to update status; delete stays creator-only', async () => {
+      const assignee = await registerUser({ firstName: 'Assignee' });
+      const admin = await registerUser({ firstName: 'Admin' });
+      const plainMember = await registerUser({ firstName: 'Plain' });
+
+      const teamRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token))
+        .send({ name: 'Status Auth Team' });
+      const teamId = teamRes.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: assignee.userId, role: 'MEMBER' });
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: admin.userId, role: 'ADMIN' });
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: plainMember.userId, role: 'MEMBER' });
+
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Kanban card',
+          teamId,
+          assignedToId: assignee.userId,
+          status: 'TODO',
+        });
+      expect(created.status).toBe(201);
+      const taskId = created.body.data.id as string;
+
+      // Assignee can update status (Kanban)
+      const byAssignee = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(assignee.token!))
+        .send({ status: 'IN_PROGRESS' });
+      expect(byAssignee.status).toBe(200);
+      expect(byAssignee.body.data.status).toBe('IN_PROGRESS');
+
+      // Team ADMIN (not creator/assignee) can update status
+      const byAdmin = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(admin.token!))
+        .send({ status: 'IN_REVIEW' });
+      expect(byAdmin.status).toBe(200);
+      expect(byAdmin.body.data.status).toBe('IN_REVIEW');
+
+      // Owner (creator) can update status
+      const byOwner = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(token))
+        .send({ status: 'DONE' });
+      expect(byOwner.status).toBe(200);
+      expect(byOwner.body.data.status).toBe('DONE');
+
+      // Plain MEMBER who is not assignee cannot update
+      const byMember = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(plainMember.token!))
+        .send({ status: 'TODO' });
+      expect(byMember.status).toBe(403);
+
+      // Assignee cannot delete
+      const deleteByAssignee = await request(app)
+        .delete(`${API}/tasks/${taskId}`)
+        .set(authHeader(assignee.token!));
+      expect(deleteByAssignee.status).toBe(403);
+      expect(await prisma.task.findUnique({ where: { id: taskId } })).not.toBeNull();
+
+      // Creator can delete
+      const deleteByCreator = await request(app)
+        .delete(`${API}/tasks/${taskId}`)
+        .set(authHeader(token));
+      expect(deleteByCreator.status).toBe(200);
+      expect(await prisma.task.findUnique({ where: { id: taskId } })).toBeNull();
+    });
   });
 
-  describe('Teams (deferred)', () => {
+  describe('Teams', () => {
     it('requires auth for teams base path', async () => {
       const res = await request(app).get(`${API}/teams`);
       expect(res.status).toBe(401);
     });
 
-    it('has no implemented team handlers yet', async () => {
+    it('creates a team and lists it for the creator', async () => {
+      const { token, userId } = await registerUser({ firstName: 'Owner' });
+
+      const createRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token!))
+        .send({ name: 'Alpha Team', description: 'First team' });
+
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.success).toBe(true);
+      expect(createRes.body.data.name).toBe('Alpha Team');
+      expect(createRes.body.data.createdById).toBe(userId);
+      expect(createRes.body.data.members).toHaveLength(1);
+      expect(createRes.body.data.members[0].role).toBe('OWNER');
+      expect(createRes.body.data.members[0].userId).toBe(userId);
+
+      const listRes = await request(app).get(`${API}/teams`).set(authHeader(token!));
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data).toHaveLength(1);
+      expect(listRes.body.data[0].id).toBe(createRes.body.data.id);
+
+      const row = await prisma.team.findUnique({
+        where: { id: createRes.body.data.id },
+        include: { members: true },
+      });
+      expect(row).not.toBeNull();
+      expect(row!.members).toHaveLength(1);
+    });
+
+    it('updates and deletes a team as OWNER', async () => {
       const { token } = await registerUser();
-      const res = await request(app).get(`${API}/teams`).set(authHeader(token!));
-      // Router mounts auth but no handlers → Express 404
-      expect(res.status).toBe(404);
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token!))
+        .send({ name: 'Rename Me' });
+      const teamId = created.body.data.id as string;
+
+      const updateRes = await request(app)
+        .put(`${API}/teams/${teamId}`)
+        .set(authHeader(token!))
+        .send({ name: 'Renamed', description: 'Updated' });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.name).toBe('Renamed');
+      expect(updateRes.body.data.description).toBe('Updated');
+
+      const deleteRes = await request(app)
+        .delete(`${API}/teams/${teamId}`)
+        .set(authHeader(token!));
+      expect(deleteRes.status).toBe(200);
+
+      const listRes = await request(app).get(`${API}/teams`).set(authHeader(token!));
+      expect(listRes.body.data).toHaveLength(0);
+      expect(await prisma.team.count()).toBe(0);
+    });
+
+    it('adds, lists, updates role, and removes members', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const member = await registerUser({ firstName: 'Member' });
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Collab' });
+      const teamId = created.body.data.id as string;
+
+      const addRes = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: member.userId, role: 'MEMBER' });
+      expect(addRes.status).toBe(201);
+      expect(addRes.body.data.userId).toBe(member.userId);
+      expect(addRes.body.data.role).toBe('MEMBER');
+      const membershipId = addRes.body.data.id as string;
+
+      const listMembersRes = await request(app)
+        .get(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!));
+      expect(listMembersRes.status).toBe(200);
+      expect(listMembersRes.body.data).toHaveLength(2);
+
+      // Member can see the team
+      const memberList = await request(app)
+        .get(`${API}/teams`)
+        .set(authHeader(member.token!));
+      expect(memberList.body.data).toHaveLength(1);
+
+      const roleRes = await request(app)
+        .put(`${API}/teams/${teamId}/members/${membershipId}`)
+        .set(authHeader(owner.token!))
+        .send({ role: 'ADMIN' });
+      expect(roleRes.status).toBe(200);
+      expect(roleRes.body.data.role).toBe('ADMIN');
+
+      const removeRes = await request(app)
+        .delete(`${API}/teams/${teamId}/members/${membershipId}`)
+        .set(authHeader(owner.token!));
+      expect(removeRes.status).toBe(200);
+
+      const afterRemove = await request(app)
+        .get(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!));
+      expect(afterRemove.body.data).toHaveLength(1);
+    });
+
+    it('forbids non-members and blocks removing the last OWNER', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Private' });
+      const teamId = created.body.data.id as string;
+      const ownerMembershipId = created.body.data.members[0].id as string;
+
+      const forbidden = await request(app)
+        .get(`${API}/teams/${teamId}`)
+        .set(authHeader(stranger.token!));
+      expect(forbidden.status).toBe(403);
+
+      const removeOwner = await request(app)
+        .delete(`${API}/teams/${teamId}/members/${ownerMembershipId}`)
+        .set(authHeader(owner.token!));
+      expect(removeOwner.status).toBe(400);
+    });
+
+    it('rejects duplicate membership and unknown user', async () => {
+      const owner = await registerUser();
+      const other = await registerUser();
+
+      const created = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(owner.token!))
+        .send({ name: 'Dup Check' });
+      const teamId = created.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: other.userId });
+
+      const dup = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: other.userId });
+      expect(dup.status).toBe(409);
+
+      const missing = await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(owner.token!))
+        .send({ userId: '00000000-0000-4000-8000-000000000099' });
+      expect(missing.status).toBe(404);
+    });
+  });
+
+  describe('Comments', () => {
+    it('creates, lists, updates, and deletes comments on an accessible task', async () => {
+      const owner = await registerUser({ firstName: 'Owner' });
+      const stranger = await registerUser({ firstName: 'Stranger' });
+
+      const taskRes = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(owner.token!))
+        .send({ title: 'Commented task' });
+      const taskId = taskRes.body.data.id as string;
+
+      const createRes = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(owner.token!))
+        .send({ taskId, content: 'First note' });
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.data.content).toBe('First note');
+      expect(createRes.body.data.userId).toBe(owner.userId);
+      expect(createRes.body.data.user.firstName).toBe('Owner');
+      const commentId = createRes.body.data.id as string;
+
+      const listRes = await request(app)
+        .get(`${API}/tasks/${taskId}/comments`)
+        .set(authHeader(owner.token!));
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data).toHaveLength(1);
+      expect(listRes.body.data[0].id).toBe(commentId);
+
+      const updateRes = await request(app)
+        .put(`${API}/comments/${commentId}`)
+        .set(authHeader(owner.token!))
+        .send({ content: 'Updated note' });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.content).toBe('Updated note');
+
+      // Stranger cannot list or comment
+      const forbiddenList = await request(app)
+        .get(`${API}/tasks/${taskId}/comments`)
+        .set(authHeader(stranger.token!));
+      expect(forbiddenList.status).toBe(403);
+
+      const forbiddenCreate = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(stranger.token!))
+        .send({ taskId, content: 'Nope' });
+      expect(forbiddenCreate.status).toBe(403);
+
+      // Stranger cannot edit/delete owner's comment
+      const forbiddenEdit = await request(app)
+        .put(`${API}/comments/${commentId}`)
+        .set(authHeader(stranger.token!))
+        .send({ content: 'Hijack' });
+      expect(forbiddenEdit.status).toBe(403);
+
+      const deleteRes = await request(app)
+        .delete(`${API}/comments/${commentId}`)
+        .set(authHeader(owner.token!));
+      expect(deleteRes.status).toBe(200);
+      expect(await prisma.comment.count({ where: { taskId } })).toBe(0);
+    });
+
+    it('rejects empty comment content', async () => {
+      const { token } = await registerUser();
+      const taskRes = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token!))
+        .send({ title: 'Empty comment task' });
+
+      const res = await request(app)
+        .post(`${API}/comments`)
+        .set(authHeader(token!))
+        .send({ taskId: taskRes.body.data.id, content: '   ' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.body.success).toBe(false);
     });
   });
 });
