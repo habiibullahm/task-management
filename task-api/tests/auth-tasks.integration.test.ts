@@ -618,6 +618,88 @@ describe('API + DB integration', () => {
       expect(cleared.body.data.teamId).toBeNull();
       expect(cleared.body.data.assignedToId).toBeNull();
     });
+
+    it('allows assignee and team OWNER/ADMIN to update status; delete stays creator-only', async () => {
+      const assignee = await registerUser({ firstName: 'Assignee' });
+      const admin = await registerUser({ firstName: 'Admin' });
+      const plainMember = await registerUser({ firstName: 'Plain' });
+
+      const teamRes = await request(app)
+        .post(`${API}/teams`)
+        .set(authHeader(token))
+        .send({ name: 'Status Auth Team' });
+      const teamId = teamRes.body.data.id as string;
+
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: assignee.userId, role: 'MEMBER' });
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: admin.userId, role: 'ADMIN' });
+      await request(app)
+        .post(`${API}/teams/${teamId}/members`)
+        .set(authHeader(token))
+        .send({ userId: plainMember.userId, role: 'MEMBER' });
+
+      const created = await request(app)
+        .post(`${API}/tasks`)
+        .set(authHeader(token))
+        .send({
+          title: 'Kanban card',
+          teamId,
+          assignedToId: assignee.userId,
+          status: 'TODO',
+        });
+      expect(created.status).toBe(201);
+      const taskId = created.body.data.id as string;
+
+      // Assignee can update status (Kanban)
+      const byAssignee = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(assignee.token!))
+        .send({ status: 'IN_PROGRESS' });
+      expect(byAssignee.status).toBe(200);
+      expect(byAssignee.body.data.status).toBe('IN_PROGRESS');
+
+      // Team ADMIN (not creator/assignee) can update status
+      const byAdmin = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(admin.token!))
+        .send({ status: 'IN_REVIEW' });
+      expect(byAdmin.status).toBe(200);
+      expect(byAdmin.body.data.status).toBe('IN_REVIEW');
+
+      // Owner (creator) can update status
+      const byOwner = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(token))
+        .send({ status: 'DONE' });
+      expect(byOwner.status).toBe(200);
+      expect(byOwner.body.data.status).toBe('DONE');
+
+      // Plain MEMBER who is not assignee cannot update
+      const byMember = await request(app)
+        .put(`${API}/tasks/${taskId}`)
+        .set(authHeader(plainMember.token!))
+        .send({ status: 'TODO' });
+      expect(byMember.status).toBe(403);
+
+      // Assignee cannot delete
+      const deleteByAssignee = await request(app)
+        .delete(`${API}/tasks/${taskId}`)
+        .set(authHeader(assignee.token!));
+      expect(deleteByAssignee.status).toBe(403);
+      expect(await prisma.task.findUnique({ where: { id: taskId } })).not.toBeNull();
+
+      // Creator can delete
+      const deleteByCreator = await request(app)
+        .delete(`${API}/tasks/${taskId}`)
+        .set(authHeader(token));
+      expect(deleteByCreator.status).toBe(200);
+      expect(await prisma.task.findUnique({ where: { id: taskId } })).toBeNull();
+    });
   });
 
   describe('Teams', () => {

@@ -144,7 +144,7 @@ export class TaskService {
     if (!existing) {
       throw new AppError(404, 'Task not found');
     }
-    this.assertCanModify(userId, existing);
+    await this.assertCanModify(userId, existing);
 
     const nextTeamId =
       data.teamId !== undefined ? data.teamId?.trim() || null : existing.teamId;
@@ -200,7 +200,7 @@ export class TaskService {
     if (!existing) {
       throw new AppError(404, 'Task not found');
     }
-    this.assertCanModify(userId, existing);
+    this.assertCanDelete(userId, existing);
     await taskRepository.delete(taskId);
 
     void emitTaskRealtime({
@@ -258,9 +258,23 @@ export class TaskService {
     throw new AppError(403, 'You do not have access to this task');
   }
 
-  private assertCanModify(userId: string, task: Task): void {
+  /** Creator, assignee, or team OWNER/ADMIN may update (including Kanban status). */
+  private async assertCanModify(userId: string, task: Task): Promise<void> {
+    if (task.createdById === userId || task.assignedToId === userId) {
+      return;
+    }
+    if (task.teamId) {
+      const membership = await teamRepository.findMembership(task.teamId, userId);
+      if (membership && (membership.role === 'OWNER' || membership.role === 'ADMIN')) {
+        return;
+      }
+    }
+    throw new AppError(403, 'Only the task owner, assignee, or a team OWNER/ADMIN can modify this task');
+  }
+
+  private assertCanDelete(userId: string, task: Task): void {
     if (task.createdById !== userId) {
-      throw new AppError(403, 'Only the task owner can modify this task');
+      throw new AppError(403, 'Only the task owner can delete this task');
     }
   }
 }
