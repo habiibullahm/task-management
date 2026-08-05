@@ -1,6 +1,7 @@
 import app from './app';
 import env from './config/env';
 import Database from './config/database';
+import { MailerUtil } from './utils/mailer.util';
 
 const PORT = env.get('PORT');
 
@@ -8,6 +9,12 @@ async function startServer() {
   try {
     // Connect to database
     await Database.connect();
+
+    if (env.isProduction() && !MailerUtil.isConfigured()) {
+      console.warn(
+        '[mailer] SMTP_* or RESEND_API_KEY is not set — forgot-password will return 503 until configured'
+      );
+    }
 
     // Start server
     const server = app.listen(PORT, () => {
