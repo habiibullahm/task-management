@@ -50,12 +50,13 @@ export class MailerUtil {
 
   private static buildBodies(resetUrl: string): { text: string; html: string } {
     const text = [
-      'Reset your Task Management password',
+      'Reset your password',
       '',
-      'We received a request to reset your password. Open this link (expires in 1 hour):',
+      'Someone requested a password reset for your Task Management account.',
+      'Use this link within the next hour to choose a new password:',
       resetUrl,
       '',
-      'If you did not request this, you can ignore this email.',
+      'If you did not make this request, you can safely ignore this email. Your password will stay the same.',
     ].join('\n');
 
     const html = `
@@ -63,15 +64,15 @@ export class MailerUtil {
 <html>
   <body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111; max-width: 480px; margin: 0 auto; padding: 24px;">
     <h1 style="font-size: 20px; margin: 0 0 16px;">Reset your password</h1>
-    <p style="margin: 0 0 16px;">We received a request to reset your Task Management password. This link expires in <strong>1 hour</strong>.</p>
+    <p style="margin: 0 0 16px;">Someone requested a password reset for your Task Management account. Click the button below to choose a new password. This link expires in <strong>1 hour</strong>.</p>
     <p style="margin: 0 0 24px;">
       <a href="${resetUrl}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 6px; font-weight: 600;">
-        Reset password
+        Choose a new password
       </a>
     </p>
-    <p style="margin: 0 0 8px; font-size: 13px; color: #555;">Or copy this link:</p>
+    <p style="margin: 0 0 8px; font-size: 13px; color: #555;">Or paste this link into your browser:</p>
     <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #333;">${resetUrl}</p>
-    <p style="margin: 0; font-size: 13px; color: #777;">If you did not request this, you can ignore this email.</p>
+    <p style="margin: 0; font-size: 13px; color: #777;">If you did not make this request, you can safely ignore this email. Your password will stay the same.</p>
   </body>
 </html>`.trim();
 
@@ -103,7 +104,7 @@ export class MailerUtil {
           .sendMail({
             from,
             to,
-            subject: 'Reset your Task Management password',
+            subject: 'Reset your password — Task Management',
             text,
             html,
           })
@@ -145,7 +146,7 @@ export class MailerUtil {
         body: JSON.stringify({
           from,
           to: [to],
-          subject: 'Reset your Task Management password',
+          subject: 'Reset your password — Task Management',
           text,
           html,
         }),

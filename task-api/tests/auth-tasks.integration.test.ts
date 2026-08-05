@@ -233,9 +233,10 @@ describe('API + DB integration', () => {
         const body = JSON.parse(String(init.body));
         expect(body.to).toEqual([email]);
         expect(body.subject).toMatch(/reset/i);
-        expect(body.html).toMatch(/Reset password/);
+        expect(body.html).toMatch(/Choose a new password/);
         expect(body.text).toMatch(/reset-password\?token=/);
         expect(body.html).toMatch(/http:\/\/localhost:3000\/reset-password\?token=/);
+        expect(body.html).toMatch(/safely ignore/i);
       } finally {
         global.fetch = originalFetch;
         clearMailerEnv();
