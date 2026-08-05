@@ -53,10 +53,16 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const task = await taskService.createTask(data);
-      set((state) => ({ 
-        tasks: [...state.tasks, task], 
-        isLoading: false 
-      }));
+      set((state) => {
+        // Realtime may have already inserted this task before the HTTP response returns.
+        if (state.tasks.some((t) => t.id === task.id)) {
+          return {
+            tasks: state.tasks.map((t) => (t.id === task.id ? task : t)),
+            isLoading: false,
+          };
+        }
+        return { tasks: [...state.tasks, task], isLoading: false };
+      });
       return task;
     } catch (error) {
       const errorMessage = handleApiError(error, 'Failed to create task');
