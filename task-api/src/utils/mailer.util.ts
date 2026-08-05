@@ -3,10 +3,10 @@ import env from '../config/env';
 
 type SendResult = { sent: boolean; error?: string };
 
-/** Fail fast on hung SMTP (e.g. Render → Gmail); nodemailer defaults are ~2 minutes. */
-const SMTP_CONNECTION_TIMEOUT_MS = 10_000;
-const SMTP_GREETING_TIMEOUT_MS = 10_000;
-const SMTP_SOCKET_TIMEOUT_MS = 10_000;
+/** Fail fast on hung SMTP (e.g. Render → Gmail); leave headroom under the UI axios timeout. */
+const SMTP_CONNECTION_TIMEOUT_MS = 5_000;
+const SMTP_GREETING_TIMEOUT_MS = 5_000;
+const SMTP_SOCKET_TIMEOUT_MS = 5_000;
 
 /**
  * Password-reset email.
@@ -138,7 +138,16 @@ export class MailerUtil {
 
   public static async sendPasswordResetEmail(to: string, resetUrl: string): Promise<SendResult> {
     if (this.hasSmtp()) {
-      return this.sendViaSmtp(to, resetUrl);
+      const smtp = await this.sendViaSmtp(to, resetUrl);
+      if (smtp.sent) {
+        return smtp;
+      }
+      // Render often blocks Gmail SMTP; fall back to Resend when configured
+      if (process.env.RESEND_API_KEY?.trim()) {
+        console.warn(`Mailer: SMTP failed (${smtp.error ?? 'unknown'}), trying Resend fallback`);
+        return this.sendViaResend(to, resetUrl);
+      }
+      return smtp;
     }
     if (process.env.RESEND_API_KEY?.trim()) {
       return this.sendViaResend(to, resetUrl);
