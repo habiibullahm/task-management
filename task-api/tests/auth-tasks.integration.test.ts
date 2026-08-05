@@ -42,6 +42,7 @@ describe('API + DB integration', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.db).toBe('ok');
+      expect(typeof res.body.data.mailerConfigured).toBe('boolean');
     });
   });
 
@@ -270,6 +271,9 @@ describe('API + DB integration', () => {
             host: 'smtp.example.com',
             port: 587,
             auth: { user: 'smtp-user@example.com', pass: 'smtp-pass' },
+            connectionTimeout: 10_000,
+            greetingTimeout: 10_000,
+            socketTimeout: 10_000,
           })
         );
         expect(sendMail).toHaveBeenCalledTimes(1);
@@ -286,6 +290,34 @@ describe('API + DB integration', () => {
       } finally {
         createTransportSpy.mockRestore();
         global.fetch = originalFetch;
+        clearMailerEnv();
+      }
+    });
+
+    it('forgot-password returns 503 when configured mailer fails to send', async () => {
+      const { email } = await registerUser({ firstName: 'SmtpFail' });
+      clearMailerEnv();
+      process.env.SMTP_HOST = 'smtp.example.com';
+      process.env.SMTP_PORT = '587';
+      process.env.SMTP_USER = 'smtp-user@example.com';
+      process.env.SMTP_PASS = 'smtp-pass';
+      process.env.EMAIL_FROM = 'Task Management <smtp-user@example.com>';
+      process.env.APP_URL = 'http://localhost:3000';
+
+      const sendMail = jest.fn().mockRejectedValue(new Error('SMTP connection refused'));
+      const createTransportSpy = jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue({ sendMail } as unknown as ReturnType<typeof nodemailer.createTransport>);
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(503);
+        expect(forgot.body.success).toBe(false);
+        expect(forgot.body.message).toMatch(/unavailable/i);
+        expect(forgot.body.data?.devResetUrl).toBeUndefined();
+        expect(forgot.body.data?.emailError).toBeUndefined();
+      } finally {
+        createTransportSpy.mockRestore();
         clearMailerEnv();
       }
     });

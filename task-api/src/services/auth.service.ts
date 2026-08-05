@@ -12,6 +12,8 @@ import env from '../config/env';
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const GENERIC_FORGOT_MESSAGE =
   'If an account exists for that email, password reset instructions have been sent.';
+const MAILER_UNAVAILABLE_MESSAGE =
+  'Password reset email is unavailable. Please try again later.';
 
 export class AuthService {
   /**
@@ -164,10 +166,11 @@ export class AuthService {
   }
 
   /**
-   * Request password reset — always returns the same message (no email oracle).
-   * Sends email via SMTP (preferred) or Resend when configured.
-   * Raw token is only returned in NODE_ENV=test (for CI/e2e without inbox access).
-   * In development without Resend, the reset URL is logged once.
+   * Request password reset — always returns the same success message when mail works
+   * (no email oracle for unknown addresses).
+   * Production: 503 if mailer is missing or send fails.
+   * Development: returns devResetUrl when mail cannot be sent (local DX).
+   * Test: returns resetToken without requiring a real mailer.
    */
   async forgotPassword(email: string): Promise<{
     message: string;
@@ -176,6 +179,10 @@ export class AuthService {
     devResetUrl?: string;
     emailError?: string;
   }> {
+    if (!MailerUtil.isConfigured() && env.isProduction()) {
+      throw new AppError(503, MAILER_UNAVAILABLE_MESSAGE);
+    }
+
     const normalized = email.trim().toLowerCase();
     const user = await userRepository.findByEmail(normalized);
 
@@ -194,39 +201,47 @@ export class AuthService {
     });
 
     const resetUrl = MailerUtil.buildResetUrl(rawToken);
-    const mail = await MailerUtil.sendPasswordResetEmail(user.email, resetUrl);
-    const sent = mail.sent;
 
-    if (!sent && env.isDevelopment()) {
-      if (!MailerUtil.isConfigured()) {
-        console.info(
-          `[auth] Password reset link (email not sent — set SMTP_* or RESEND_API_KEY): ${resetUrl}`
-        );
-      } else {
-        console.info(
-          `[auth] Password reset link (Resend failed: ${mail.error ?? 'unknown'}): ${resetUrl}`
-        );
+    // CI / e2e: no inbox — skip send when mailer is unset
+    if (env.isTest() && !MailerUtil.isConfigured()) {
+      return {
+        message: GENERIC_FORGOT_MESSAGE,
+        emailSent: false,
+        resetToken: rawToken,
+      };
+    }
+
+    const mail = await MailerUtil.sendPasswordResetEmail(user.email, resetUrl);
+    if (!mail.sent) {
+      console.error(`[auth] Password reset email failed: ${mail.error ?? 'unknown'}`);
+
+      if (env.isDevelopment()) {
+        console.info(`[auth] Password reset link (email not sent): ${resetUrl}`);
+        return {
+          message: GENERIC_FORGOT_MESSAGE,
+          emailSent: false,
+          devResetUrl: resetUrl,
+          emailError: mail.error,
+        };
       }
+
+      // Production, or test with a configured mailer that failed
+      throw new AppError(503, MAILER_UNAVAILABLE_MESSAGE);
     }
 
     const result: {
       message: string;
       resetToken?: string;
       emailSent: boolean;
-      /** Development only — shown in UI when Resend is not configured / fails */
       devResetUrl?: string;
       emailError?: string;
     } = {
       message: GENERIC_FORGOT_MESSAGE,
-      emailSent: sent,
+      emailSent: true,
     };
 
-    // Never expose tokens outside automated tests / local DX without successful email
     if (env.isTest()) {
       result.resetToken = rawToken;
-    } else if (env.isDevelopment() && !sent) {
-      result.devResetUrl = resetUrl;
-      if (mail.error) result.emailError = mail.error;
     }
     return result;
   }

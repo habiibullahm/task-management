@@ -3,6 +3,11 @@ import env from '../config/env';
 
 type SendResult = { sent: boolean; error?: string };
 
+/** Fail fast on hung SMTP (e.g. Render → Gmail); nodemailer defaults are ~2 minutes. */
+const SMTP_CONNECTION_TIMEOUT_MS = 10_000;
+const SMTP_GREETING_TIMEOUT_MS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MS = 10_000;
+
 /**
  * Password-reset email.
  * Prefer SMTP (Gmail App Password / any SMTP) when SMTP_* is set;
@@ -65,6 +70,9 @@ export class MailerUtil {
         port,
         secure: port === 465,
         auth: { user, pass },
+        connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+        greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+        socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       });
 
       await transporter.sendMail({
