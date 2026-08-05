@@ -7,15 +7,24 @@ type SendResult = { sent: boolean; error?: string };
 const SMTP_CONNECTION_TIMEOUT_MS = 5_000;
 const SMTP_GREETING_TIMEOUT_MS = 5_000;
 const SMTP_SOCKET_TIMEOUT_MS = 5_000;
+const SMTP_HARD_TIMEOUT_MS = 6_000;
 
 /**
  * Password-reset email.
- * Prefer SMTP (Gmail App Password / any SMTP) when SMTP_* is set;
- * otherwise use Resend when RESEND_API_KEY is set.
+ * Prefer SMTP locally; in production prefer Resend when RESEND_API_KEY is set
+ * (Gmail SMTP is often blocked from Render).
  */
 export class MailerUtil {
   public static isConfigured(): boolean {
-    return this.hasSmtp() || Boolean(process.env.RESEND_API_KEY?.trim());
+    return this.hasSmtp() || this.hasResend();
+  }
+
+  public static hasSmtpConfigured(): boolean {
+    return this.hasSmtp();
+  }
+
+  public static hasResendConfigured(): boolean {
+    return this.hasResend();
   }
 
   private static hasSmtp(): boolean {
@@ -24,6 +33,19 @@ export class MailerUtil {
         process.env.SMTP_USER?.trim() &&
         process.env.SMTP_PASS?.trim()
     );
+  }
+
+  private static hasResend(): boolean {
+    return Boolean(process.env.RESEND_API_KEY?.trim());
+  }
+
+  /** Resend rejects arbitrary Gmail From addresses unless the domain is verified. */
+  private static resendFromAddress(): string {
+    const explicit = process.env.RESEND_FROM?.trim();
+    if (explicit) return explicit;
+    const from = process.env.EMAIL_FROM?.trim();
+    if (from && /@resend\.dev\b/i.test(from)) return from;
+    return 'Task Management <onboarding@resend.dev>';
   }
 
   private static buildBodies(resetUrl: string): { text: string; html: string } {
@@ -75,12 +97,24 @@ export class MailerUtil {
         socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       });
 
-      await transporter.sendMail({
-        from,
-        to,
-        subject: 'Reset your Task Management password',
-        text,
-        html,
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('SMTP send timed out')), SMTP_HARD_TIMEOUT_MS);
+        transporter
+          .sendMail({
+            from,
+            to,
+            subject: 'Reset your Task Management password',
+            text,
+            html,
+          })
+          .then(() => {
+            clearTimeout(timer);
+            resolve();
+          })
+          .catch((err: unknown) => {
+            clearTimeout(timer);
+            reject(err);
+          });
       });
       return { sent: true };
     } catch (error) {
@@ -98,7 +132,7 @@ export class MailerUtil {
       return { sent: false, error: 'RESEND_API_KEY is not set' };
     }
 
-    const from = process.env.EMAIL_FROM?.trim() || 'onboarding@resend.dev';
+    const from = this.resendFromAddress();
     const { text, html } = this.buildBodies(resetUrl);
 
     try {
@@ -137,21 +171,27 @@ export class MailerUtil {
   }
 
   public static async sendPasswordResetEmail(to: string, resetUrl: string): Promise<SendResult> {
+    // Production: prefer Resend when available (HTTPS works on Render; Gmail SMTP often does not)
+    if (env.isProduction() && this.hasResend()) {
+      return this.sendViaResend(to, resetUrl);
+    }
+
     if (this.hasSmtp()) {
       const smtp = await this.sendViaSmtp(to, resetUrl);
       if (smtp.sent) {
         return smtp;
       }
-      // Render often blocks Gmail SMTP; fall back to Resend when configured
-      if (process.env.RESEND_API_KEY?.trim()) {
+      if (this.hasResend()) {
         console.warn(`Mailer: SMTP failed (${smtp.error ?? 'unknown'}), trying Resend fallback`);
         return this.sendViaResend(to, resetUrl);
       }
       return smtp;
     }
-    if (process.env.RESEND_API_KEY?.trim()) {
+
+    if (this.hasResend()) {
       return this.sendViaResend(to, resetUrl);
     }
+
     return { sent: false, error: 'No mailer configured (set SMTP_* or RESEND_API_KEY)' };
   }
 
