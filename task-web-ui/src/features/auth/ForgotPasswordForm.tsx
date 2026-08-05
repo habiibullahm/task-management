@@ -18,43 +18,8 @@ export function ForgotPasswordForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // #region agent log
-    const __dbgStarted = Date.now();
-    fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
-        body: JSON.stringify({
-          sessionId: 'd7a94c',
-          runId: 'post-fix',
-          hypothesisId: 'A',
-          location: 'ForgotPasswordForm.tsx:submit',
-          message: 'forgot-password submit started',
-          data: { apiBase: import.meta.env.VITE_API_BASE_URL || 'default' },
-          timestamp: Date.now(),
-        }),
-    }).catch(() => {});
-    // #endregion
     try {
       const result = await authService.forgotPassword(email);
-      // #region agent log
-      fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
-        body: JSON.stringify({
-          sessionId: 'd7a94c',
-          runId: 'post-fix',
-          hypothesisId: 'A',
-          location: 'ForgotPasswordForm.tsx:success',
-          message: 'forgot-password succeeded',
-          data: {
-            elapsedMs: Date.now() - __dbgStarted,
-            emailSent: result.emailSent === true,
-            hasDevResetUrl: Boolean(result.devResetUrl),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       setSubmitted(true);
       if (result.devResetUrl) {
         setDevResetUrl(result.devResetUrl);
@@ -70,27 +35,6 @@ export function ForgotPasswordForm() {
         toast.success(result.message);
       }
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
-        body: JSON.stringify({
-          sessionId: 'd7a94c',
-          runId: 'post-fix',
-          hypothesisId: 'A',
-          location: 'ForgotPasswordForm.tsx:catch',
-          message: 'forgot-password failed',
-          data: {
-            elapsedMs: Date.now() - __dbgStarted,
-            errorName: error instanceof Error ? error.name : typeof error,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            looksLikeAxiosTimeout:
-              error instanceof Error && /timeout of \d+ms exceeded/i.test(error.message),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       toast.error(handleApiError(error, 'Unable to process password reset'));
     } finally {
       setIsLoading(false);

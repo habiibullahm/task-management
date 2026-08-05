@@ -24,6 +24,8 @@ router.get('/health', async (_req, res) => {
     data: {
       db,
       mailerConfigured: MailerUtil.isConfigured(),
+      smtpConfigured: MailerUtil.hasSmtpConfigured(),
+      resendConfigured: MailerUtil.hasResendConfigured(),
     },
   });
 });

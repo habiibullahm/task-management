@@ -43,6 +43,8 @@ describe('API + DB integration', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.db).toBe('ok');
       expect(typeof res.body.data.mailerConfigured).toBe('boolean');
+      expect(typeof res.body.data.smtpConfigured).toBe('boolean');
+      expect(typeof res.body.data.resendConfigured).toBe('boolean');
     });
   });
 
