@@ -108,7 +108,7 @@ test.describe('Dashboard', () => {
     await expect(page).toHaveURL(/\/tasks$/);
 
     await page.goto('/dashboard');
-    await page.getByRole('button', { name: 'Manage Teams' }).click();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Teams' }).click();
     await expect(page).toHaveURL(/\/teams\/?$/);
     await expect(page.getByRole('heading', { name: 'My Teams' })).toBeVisible();
   });
@@ -124,7 +124,7 @@ test.describe('Tasks', () => {
     });
     await expect(page.getByText('E2E live task')).toBeVisible();
     await expect(
-      page.locator('div').filter({ hasText: 'E2E live task' }).getByText('High', { exact: true })
+      page.locator('div.space-y-3').locator('span').filter({ hasText: /^High$/ }),
     ).toBeVisible();
   });
 
@@ -156,7 +156,7 @@ test.describe('Tasks', () => {
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByText('Edited task title')).toBeVisible();
     await expect(
-      page.locator('div').filter({ hasText: 'Edited task title' }).getByText('Low', { exact: true })
+      page.locator('div.space-y-3').locator('span').filter({ hasText: /^Low$/ }),
     ).toBeVisible();
   });
 
@@ -189,9 +189,9 @@ test.describe('Tasks', () => {
 
     await page.getByRole('button', { name: 'All statuses', exact: true }).click();
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
-    await expect(page.getByText('Alpha filter')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Beta filter')).toHaveCount(0);
     await expect(page).toHaveURL(/search=Alpha/, { timeout: 10_000 });
+    await expect(page.getByText('Alpha filter')).toBeVisible();
+    await expect(page.getByText('Beta filter')).toHaveCount(0);
   });
 
   test('priority filter and no-match empty state', async ({ page }) => {

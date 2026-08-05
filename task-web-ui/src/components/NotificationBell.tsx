@@ -34,7 +34,7 @@ export function NotificationBell() {
       </Button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-md border bg-white shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-md border border-border bg-card shadow-lg">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <p className="text-sm font-semibold">Notifications</p>
             <button
@@ -57,7 +57,7 @@ export function NotificationBell() {
                   <button
                     type="button"
                     className={cn(
-                      'w-full border-b px-3 py-2 text-left text-sm hover:bg-gray-50',
+                      'w-full border-b border-border px-3 py-2 text-left text-sm hover:bg-muted/60',
                       !item.read && 'bg-primary/5'
                     )}
                     onClick={() => {
