@@ -122,7 +122,7 @@ test.describe('Tasks', () => {
       description: 'Created by Playwright against real API/DB',
       priority: 'HIGH',
     });
-    await expect(page.getByText('E2E live task')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'E2E live task' })).toHaveCount(1);
     await expect(
       page.locator('div.space-y-3').locator('span').filter({ hasText: /^High$/ }),
     ).toBeVisible();
@@ -154,7 +154,7 @@ test.describe('Tasks', () => {
     expect(updated.ok()).toBeTruthy();
 
     await expect(page).toHaveURL(/\/tasks$/);
-    await expect(page.getByText('Edited task title')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edited task title' })).toHaveCount(1);
     await expect(
       page.locator('div.space-y-3').locator('span').filter({ hasText: /^Low$/ }),
     ).toBeVisible();
@@ -184,14 +184,14 @@ test.describe('Tasks', () => {
     await createTaskViaUi(page, { title: 'Beta filter', status: 'IN_PROGRESS' });
 
     await page.getByRole('button', { name: 'In Progress', exact: true }).click();
-    await expect(page.getByText('Beta filter')).toBeVisible();
-    await expect(page.getByText('Alpha filter')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Beta filter' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Alpha filter' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'All statuses', exact: true }).click();
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
     await expect(page).toHaveURL(/search=Alpha/, { timeout: 10_000 });
-    await expect(page.getByText('Alpha filter')).toBeVisible();
-    await expect(page.getByText('Beta filter')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Alpha filter' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Beta filter' })).toHaveCount(0);
   });
 
   test('priority filter and no-match empty state', async ({ page }) => {
@@ -240,7 +240,7 @@ test.describe('Tasks', () => {
   test('delete task after confirm', async ({ page }) => {
     await registerViaUi(page);
     await createTaskViaUi(page, { title: 'Delete me soon' });
-    await expect(page.getByText('Delete me soon')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete me soon' })).toHaveCount(1);
 
     page.once('dialog', (dialog) => dialog.accept());
     const [deleted] = await Promise.all([
@@ -250,7 +250,7 @@ test.describe('Tasks', () => {
       page.getByRole('button', { name: 'Delete', exact: true }).click(),
     ]);
     expect(deleted.status()).toBe(200);
-    await expect(page.getByText('Delete me soon')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Delete me soon' })).toHaveCount(0);
   });
 
   test('duplicate email is rejected on register', async ({ page }) => {
