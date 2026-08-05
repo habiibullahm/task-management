@@ -74,26 +74,91 @@ export const authService = {
     devResetUrl?: string;
     emailError?: string;
   }> {
-    const response = await apiClient.post<
-      ApiResponse<{
-        resetToken?: string;
-        emailSent?: boolean;
-        devResetUrl?: string;
-        emailError?: string;
-      }>
-    >('/auth/forgot-password', {
-      email,
-    });
-    if (response.data.success) {
-      return {
-        message: response.data.message,
-        resetToken: response.data.data?.resetToken,
-        emailSent: response.data.data?.emailSent,
-        devResetUrl: response.data.data?.devResetUrl,
-        emailError: response.data.data?.emailError,
-      };
+    // #region agent log
+    const __dbgStarted = Date.now();
+    const FORGOT_PASSWORD_TIMEOUT_MS = 25_000;
+    fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
+      body: JSON.stringify({
+        sessionId: 'd7a94c',
+        runId: 'post-fix',
+        hypothesisId: 'A',
+        location: 'auth.service.ts:forgotPassword',
+        message: 'authService.forgotPassword request',
+        data: { timeoutMs: FORGOT_PASSWORD_TIMEOUT_MS },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    try {
+      const response = await apiClient.post<
+        ApiResponse<{
+          resetToken?: string;
+          emailSent?: boolean;
+          devResetUrl?: string;
+          emailError?: string;
+        }>
+      >(
+        '/auth/forgot-password',
+        {
+          email,
+        },
+        { timeout: FORGOT_PASSWORD_TIMEOUT_MS }
+      );
+      // #region agent log
+      fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
+        body: JSON.stringify({
+          sessionId: 'd7a94c',
+          runId: 'post-fix',
+          hypothesisId: 'A',
+          location: 'auth.service.ts:forgotPassword:response',
+          message: 'authService.forgotPassword got response',
+          data: {
+            elapsedMs: Date.now() - __dbgStarted,
+            httpStatus: response.status,
+            success: response.data.success,
+            emailSent: response.data.data?.emailSent,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (response.data.success) {
+        return {
+          message: response.data.message,
+          resetToken: response.data.data?.resetToken,
+          emailSent: response.data.data?.emailSent,
+          devResetUrl: response.data.data?.devResetUrl,
+          emailError: response.data.data?.emailError,
+        };
+      }
+      throw new Error(response.data.message || 'Unable to process password reset');
+    } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7355/ingest/ccefaceb-6e3b-4191-bb20-389c82942a55', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd7a94c' },
+        body: JSON.stringify({
+          sessionId: 'd7a94c',
+          runId: 'post-fix',
+          hypothesisId: 'A',
+          location: 'auth.service.ts:forgotPassword:catch',
+          message: 'authService.forgotPassword error',
+          data: {
+            elapsedMs: Date.now() - __dbgStarted,
+            errorMessage: error instanceof Error ? error.message : String(error),
+            looksLikeAxiosTimeout:
+              error instanceof Error && /timeout of \d+ms exceeded/i.test(error.message),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      throw error;
     }
-    throw new Error(response.data.message || 'Unable to process password reset');
   },
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
