@@ -42,6 +42,9 @@ describe('API + DB integration', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.db).toBe('ok');
+      expect(typeof res.body.data.mailerConfigured).toBe('boolean');
+      expect(typeof res.body.data.smtpConfigured).toBe('boolean');
+      expect(typeof res.body.data.resendConfigured).toBe('boolean');
     });
   });
 
@@ -230,9 +233,10 @@ describe('API + DB integration', () => {
         const body = JSON.parse(String(init.body));
         expect(body.to).toEqual([email]);
         expect(body.subject).toMatch(/reset/i);
-        expect(body.html).toMatch(/Reset password/);
+        expect(body.html).toMatch(/Choose a new password/);
         expect(body.text).toMatch(/reset-password\?token=/);
         expect(body.html).toMatch(/http:\/\/localhost:3000\/reset-password\?token=/);
+        expect(body.html).toMatch(/safely ignore/i);
       } finally {
         global.fetch = originalFetch;
         clearMailerEnv();
@@ -270,6 +274,9 @@ describe('API + DB integration', () => {
             host: 'smtp.example.com',
             port: 587,
             auth: { user: 'smtp-user@example.com', pass: 'smtp-pass' },
+            connectionTimeout: 5_000,
+            greetingTimeout: 5_000,
+            socketTimeout: 5_000,
           })
         );
         expect(sendMail).toHaveBeenCalledTimes(1);
@@ -283,6 +290,74 @@ describe('API + DB integration', () => {
           })
         );
         expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        createTransportSpy.mockRestore();
+        global.fetch = originalFetch;
+        clearMailerEnv();
+      }
+    });
+
+    it('forgot-password returns 503 when configured mailer fails to send', async () => {
+      const { email } = await registerUser({ firstName: 'SmtpFail' });
+      clearMailerEnv();
+      process.env.SMTP_HOST = 'smtp.example.com';
+      process.env.SMTP_PORT = '587';
+      process.env.SMTP_USER = 'smtp-user@example.com';
+      process.env.SMTP_PASS = 'smtp-pass';
+      process.env.EMAIL_FROM = 'Task Management <smtp-user@example.com>';
+      process.env.APP_URL = 'http://localhost:3000';
+
+      const sendMail = jest.fn().mockRejectedValue(new Error('SMTP connection refused'));
+      const createTransportSpy = jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue({ sendMail } as unknown as ReturnType<typeof nodemailer.createTransport>);
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(503);
+        expect(forgot.body.success).toBe(false);
+        expect(forgot.body.message).toMatch(/unavailable/i);
+        expect(forgot.body.data?.devResetUrl).toBeUndefined();
+        expect(forgot.body.data?.emailError).toBeUndefined();
+      } finally {
+        createTransportSpy.mockRestore();
+        clearMailerEnv();
+      }
+    });
+
+    it('forgot-password falls back to Resend when SMTP fails', async () => {
+      const { email } = await registerUser({ firstName: 'SmtpFallback' });
+      clearMailerEnv();
+      process.env.SMTP_HOST = 'smtp.example.com';
+      process.env.SMTP_PORT = '587';
+      process.env.SMTP_USER = 'smtp-user@example.com';
+      process.env.SMTP_PASS = 'smtp-pass';
+      process.env.RESEND_API_KEY = 're_fallback_key';
+      process.env.EMAIL_FROM = 'Task Management <onboarding@resend.dev>';
+      process.env.APP_URL = 'http://localhost:3000';
+
+      const sendMail = jest.fn().mockRejectedValue(new Error('SMTP timeout'));
+      const createTransportSpy = jest
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue({ sendMail } as unknown as ReturnType<typeof nodemailer.createTransport>);
+
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => 'ok',
+      });
+      const originalFetch = global.fetch;
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        const forgot = await request(app).post(`${API}/auth/forgot-password`).send({ email });
+        expect(forgot.status).toBe(200);
+        expect(forgot.body.data.emailSent).toBe(true);
+        expect(sendMail).toHaveBeenCalled();
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://api.resend.com/emails',
+          expect.objectContaining({ method: 'POST' })
+        );
       } finally {
         createTransportSpy.mockRestore();
         global.fetch = originalFetch;

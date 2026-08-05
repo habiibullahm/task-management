@@ -4,6 +4,7 @@ import taskRoutes from './task.routes';
 import teamRoutes from './team.routes';
 import commentRoutes from './comment.routes';
 import { prisma } from '../config/database';
+import { MailerUtil } from '../utils/mailer.util';
 
 const router = Router();
 
@@ -21,7 +22,12 @@ router.get('/health', async (_req, res) => {
     success: healthy,
     message: healthy ? 'API is running' : 'API is degraded',
     timestamp: new Date().toISOString(),
-    data: { db },
+    data: {
+      db,
+      mailerConfigured: MailerUtil.isConfigured(),
+      smtpConfigured: MailerUtil.hasSmtpConfigured(),
+      resendConfigured: MailerUtil.hasResendConfigured(),
+    },
   });
 });
 

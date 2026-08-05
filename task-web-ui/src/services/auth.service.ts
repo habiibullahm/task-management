@@ -74,6 +74,7 @@ export const authService = {
     devResetUrl?: string;
     emailError?: string;
   }> {
+    const FORGOT_PASSWORD_TIMEOUT_MS = 25_000;
     const response = await apiClient.post<
       ApiResponse<{
         resetToken?: string;
@@ -81,9 +82,13 @@ export const authService = {
         devResetUrl?: string;
         emailError?: string;
       }>
-    >('/auth/forgot-password', {
-      email,
-    });
+    >(
+      '/auth/forgot-password',
+      {
+        email,
+      },
+      { timeout: FORGOT_PASSWORD_TIMEOUT_MS }
+    );
     if (response.data.success) {
       return {
         message: response.data.message,

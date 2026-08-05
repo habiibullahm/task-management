@@ -63,7 +63,7 @@ export function ForgotPasswordForm() {
                     <p className="mb-2 font-medium">Local testing — email was not sent</p>
                     {emailError && (
                       <p className="mb-2 text-xs">
-                        Resend error: <span className="font-mono">{emailError}</span>
+                        Mailer error: <span className="font-mono">{emailError}</span>
                       </p>
                     )}
                     <a href={devResetUrl} className="break-all text-primary underline">

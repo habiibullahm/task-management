@@ -3,14 +3,28 @@ import env from '../config/env';
 
 type SendResult = { sent: boolean; error?: string };
 
+/** Fail fast on hung SMTP (e.g. Render → Gmail); leave headroom under the UI axios timeout. */
+const SMTP_CONNECTION_TIMEOUT_MS = 5_000;
+const SMTP_GREETING_TIMEOUT_MS = 5_000;
+const SMTP_SOCKET_TIMEOUT_MS = 5_000;
+const SMTP_HARD_TIMEOUT_MS = 6_000;
+
 /**
  * Password-reset email.
- * Prefer SMTP (Gmail App Password / any SMTP) when SMTP_* is set;
- * otherwise use Resend when RESEND_API_KEY is set.
+ * Prefer SMTP locally; in production prefer Resend when RESEND_API_KEY is set
+ * (Gmail SMTP is often blocked from Render).
  */
 export class MailerUtil {
   public static isConfigured(): boolean {
-    return this.hasSmtp() || Boolean(process.env.RESEND_API_KEY?.trim());
+    return this.hasSmtp() || this.hasResend();
+  }
+
+  public static hasSmtpConfigured(): boolean {
+    return this.hasSmtp();
+  }
+
+  public static hasResendConfigured(): boolean {
+    return this.hasResend();
   }
 
   private static hasSmtp(): boolean {
@@ -21,14 +35,28 @@ export class MailerUtil {
     );
   }
 
+  private static hasResend(): boolean {
+    return Boolean(process.env.RESEND_API_KEY?.trim());
+  }
+
+  /** Resend rejects arbitrary Gmail From addresses unless the domain is verified. */
+  private static resendFromAddress(): string {
+    const explicit = process.env.RESEND_FROM?.trim();
+    if (explicit) return explicit;
+    const from = process.env.EMAIL_FROM?.trim();
+    if (from && /@resend\.dev\b/i.test(from)) return from;
+    return 'Task Management <onboarding@resend.dev>';
+  }
+
   private static buildBodies(resetUrl: string): { text: string; html: string } {
     const text = [
-      'Reset your Task Management password',
+      'Reset your password',
       '',
-      'We received a request to reset your password. Open this link (expires in 1 hour):',
+      'Someone requested a password reset for your Task Management account.',
+      'Use this link within the next hour to choose a new password:',
       resetUrl,
       '',
-      'If you did not request this, you can ignore this email.',
+      'If you did not make this request, you can safely ignore this email. Your password will stay the same.',
     ].join('\n');
 
     const html = `
@@ -36,15 +64,15 @@ export class MailerUtil {
 <html>
   <body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111; max-width: 480px; margin: 0 auto; padding: 24px;">
     <h1 style="font-size: 20px; margin: 0 0 16px;">Reset your password</h1>
-    <p style="margin: 0 0 16px;">We received a request to reset your Task Management password. This link expires in <strong>1 hour</strong>.</p>
+    <p style="margin: 0 0 16px;">Someone requested a password reset for your Task Management account. Click the button below to choose a new password. This link expires in <strong>1 hour</strong>.</p>
     <p style="margin: 0 0 24px;">
       <a href="${resetUrl}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 6px; font-weight: 600;">
-        Reset password
+        Choose a new password
       </a>
     </p>
-    <p style="margin: 0 0 8px; font-size: 13px; color: #555;">Or copy this link:</p>
+    <p style="margin: 0 0 8px; font-size: 13px; color: #555;">Or paste this link into your browser:</p>
     <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #333;">${resetUrl}</p>
-    <p style="margin: 0; font-size: 13px; color: #777;">If you did not request this, you can ignore this email.</p>
+    <p style="margin: 0; font-size: 13px; color: #777;">If you did not make this request, you can safely ignore this email. Your password will stay the same.</p>
   </body>
 </html>`.trim();
 
@@ -65,14 +93,29 @@ export class MailerUtil {
         port,
         secure: port === 465,
         auth: { user, pass },
+        connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+        greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+        socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       });
 
-      await transporter.sendMail({
-        from,
-        to,
-        subject: 'Reset your Task Management password',
-        text,
-        html,
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('SMTP send timed out')), SMTP_HARD_TIMEOUT_MS);
+        transporter
+          .sendMail({
+            from,
+            to,
+            subject: 'Reset your password — Task Management',
+            text,
+            html,
+          })
+          .then(() => {
+            clearTimeout(timer);
+            resolve();
+          })
+          .catch((err: unknown) => {
+            clearTimeout(timer);
+            reject(err);
+          });
       });
       return { sent: true };
     } catch (error) {
@@ -90,7 +133,7 @@ export class MailerUtil {
       return { sent: false, error: 'RESEND_API_KEY is not set' };
     }
 
-    const from = process.env.EMAIL_FROM?.trim() || 'onboarding@resend.dev';
+    const from = this.resendFromAddress();
     const { text, html } = this.buildBodies(resetUrl);
 
     try {
@@ -103,7 +146,7 @@ export class MailerUtil {
         body: JSON.stringify({
           from,
           to: [to],
-          subject: 'Reset your Task Management password',
+          subject: 'Reset your password — Task Management',
           text,
           html,
         }),
@@ -129,12 +172,27 @@ export class MailerUtil {
   }
 
   public static async sendPasswordResetEmail(to: string, resetUrl: string): Promise<SendResult> {
-    if (this.hasSmtp()) {
-      return this.sendViaSmtp(to, resetUrl);
-    }
-    if (process.env.RESEND_API_KEY?.trim()) {
+    // Production: prefer Resend when available (HTTPS works on Render; Gmail SMTP often does not)
+    if (env.isProduction() && this.hasResend()) {
       return this.sendViaResend(to, resetUrl);
     }
+
+    if (this.hasSmtp()) {
+      const smtp = await this.sendViaSmtp(to, resetUrl);
+      if (smtp.sent) {
+        return smtp;
+      }
+      if (this.hasResend()) {
+        console.warn(`Mailer: SMTP failed (${smtp.error ?? 'unknown'}), trying Resend fallback`);
+        return this.sendViaResend(to, resetUrl);
+      }
+      return smtp;
+    }
+
+    if (this.hasResend()) {
+      return this.sendViaResend(to, resetUrl);
+    }
+
     return { sent: false, error: 'No mailer configured (set SMTP_* or RESEND_API_KEY)' };
   }
 
