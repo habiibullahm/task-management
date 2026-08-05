@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
+export function ProtectedRoute({ children }: Readonly<ProtectedRouteProps>) {
   const { isAuthenticated, fetchProfile, isLoading } = useAuthStore();
   const location = useLocation();
 
