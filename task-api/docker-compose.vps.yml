@@ -1,6 +1,7 @@
 services:
   api:
     build: .
+    image: task-management-api
     container_name: task-management-api
     restart: unless-stopped
     env_file: .env
