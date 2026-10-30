@@ -1,233 +1,353 @@
-# Task Management
+# Task Management System
 
-Full-stack task manager: personal tasks, teams, Kanban board, comments, and live notifications — built as a training / portfolio app with real auth, Postgres, CI, and cloud deploy.
+A full-stack collaborative task management platform with personal and team workspaces, drag-and-drop Kanban boards, real-time notifications, and comprehensive authentication.
 
-**Live demo**
+**Live Demo:** [https://task-management-indol-zeta.vercel.app/](https://task-management-indol-zeta.vercel.app/)
 
-- UI: https://task-management-ui-qapw.onrender.com/
-- API: https://task-management-zmy7.onrender.com/ (`/api/v1/health`)
+> **Try it:** Register a new account to explore the full feature set. The demo uses a separate production database.
 
-> Free Render services sleep when idle — the first request after inactivity can take ~30–60s.  
-> **Try it:** register a **new** account on the live UI. Local users are not on the Render database.
+<!-- TODO: Add screenshots showing dashboard, Kanban board, and task detail views -->
 
-## What this project is for
+## Features
 
-**For:** individuals and small teams managing to-dos in the browser.  
-**Includes:** JWT auth, personal + team tasks, comments, Kanban drag-and-drop, Socket.IO notifications.
+### Core Functionality
+- **Task Management**: Full CRUD operations with filtering, search, and sorting capabilities
+- **Kanban Board**: Drag-and-drop interface for visual task organization with status columns
+- **Team Collaboration**: Create teams, manage members, assign tasks, and track team workload
+- **Real-time Updates**: Live notifications via Socket.IO for task changes, comments, and assignments
+- **Comments System**: Threaded discussions on tasks with edit/delete permissions
 
-**Shipped:**
+### Authentication & Security
+- **Complete Auth Flow**: Registration, login, JWT access/refresh tokens, password change
+- **Password Reset**: Secure forgot-password flow with email verification
+- **Authorization**: Role-based access control (Owner, Admin, Member) for team operations
+- **Session Management**: Automatic token refresh and logout functionality
 
-- Auth: register/login/refresh, change password, forgot/reset
-- Tasks: CRUD, filters/search/sort, team + assignee
-- Teams: CRUD + members (invite by User ID from Settings)
-- Comments on task detail
-- Kanban board (`/boards`) with `@dnd-kit`
-- Realtime toasts + notification bell
-- CI + Render deploy docs
+### User Experience
+- **Responsive Design**: Mobile-first UI built with Tailwind CSS and shadcn/ui components
+- **Dashboard Analytics**: Quick stats, recent activity, and priority task overview
+- **Notification Center**: In-app notification bell with read/unread status
+- **Profile Management**: User settings and profile customization
 
-**Deferred polish:** dark-mode toggle, profile name/email edit, email verification, token revocation, file attachments, ActivityLog feed, admin RBAC APIs.
+## Architecture
 
-Built to practice real product flow: auth, CRUD, Postgres, CI, and cloud deploy — while solving a concrete user need.
-
-### Problem (why it exists)
-
-| Pain | What happens |
-|------|----------------|
-| Tasks live in notes, chats, and memory | Easy to forget priorities and due work |
-| Big tools (Jira, Notion-heavy setups) | Too much setup for personal lists |
-| Spreadsheet / sticky-note chaos | No clear status, no ownership, hard to revisit |
-
-Users need a **fast path**: account → list → create → update status → done — with data that survives refresh.
-
-### Solution (what we ship)
-
-| User need | How the app helps |
-|-----------|-------------------|
-| Keep tasks in one place | Dashboard + My Tasks + Kanban |
-| Know what’s open vs done | Status on each task (todo → in progress → done) |
-| Collaborate lightly | Teams, assignees, comments, live notifications |
-| Stay signed in securely | Register/login; JWT; ownership + team membership checks |
-| Use it from any browser | Web UI + REST API (+ Socket.IO) |
-
-## Project flow
-
-### High-level architecture
-
-```
-Browser (task-web-ui)
-    │  HTTPS / JSON + Socket.IO
-    ▼
-Express API (task-api)  ──JWT auth──► protected routes
-    │
-    │  Prisma ORM
-    ▼
-PostgreSQL (users, tasks, teams, comments, …)
-```
-
-1. The **UI** talks to the API via `VITE_API_BASE_URL` (Axios) and `VITE_WS_URL` (Socket.IO).
-2. The **API** validates input, checks JWT, runs business logic, and reads/writes via **Prisma**.
-3. **Postgres** stores users, tasks, teams, and comments. Migrations apply on deploy.
-
-### Request path (API layers)
-
-```
-Route → Middleware (auth / validation)
-     → Controller
-     → Service (business rules + realtime emit)
-     → Repository (Prisma)
-     → PostgreSQL
+```mermaid
+graph TB
+    subgraph Client["Client Layer"]
+        UI[React SPA<br/>Vite + React Router]
+        WS[Socket.IO Client]
+    end
+    
+    subgraph API["API Layer - Express"]
+        Routes[Routes]
+        Auth[Auth Middleware<br/>JWT Validation]
+        Controllers[Controllers]
+        Services[Services<br/>Business Logic]
+        Repos[Repositories<br/>Prisma ORM]
+        Realtime[Socket.IO Server<br/>Real-time Events]
+    end
+    
+    subgraph Data["Data Layer"]
+        DB[(PostgreSQL<br/>Users, Tasks, Teams<br/>Comments, Notifications)]
+    end
+    
+    UI -->|REST API| Routes
+    WS -->|WebSocket| Realtime
+    Routes --> Auth
+    Auth --> Controllers
+    Controllers --> Services
+    Services --> Repos
+    Services --> Realtime
+    Repos --> DB
+    Realtime -.->|Push Updates| WS
+    
+    style Client fill:#e3f2fd
+    style API fill:#f3e5f5
+    style Data fill:#e8f5e9
 ```
 
-### User journey
+### Request Flow
 
 ```
-/register or /login
-        │
-        ▼
-  JWT saved in browser (auth store) + Socket.IO connect
-        │
-        ▼
-   /dashboard  ←── stats / quick actions / notifications
-        │
-        ├── Create Task → /tasks/new
-        ├── My Tasks → /tasks (filters, comments on edit)
-        ├── Kanban → /boards (drag status)
-        └── Teams → /teams
+HTTP Request → Route Handler → Auth Middleware → Validation
+    → Controller → Service (business logic + emit events)
+    → Repository (Prisma) → PostgreSQL
+    ← Response ← Controller ← Service ← Repository
 ```
 
-| Step | UI | API |
-|------|----|-----|
-| Sign up / sign in | `/register`, `/login` | `POST /auth/register`, `POST /auth/login` |
-| Stay signed in | `ProtectedRoute` + tokens | `Authorization: Bearer <access>` |
-| Dashboard | `/dashboard` | `GET /tasks` |
-| Tasks | `/tasks`, `/tasks/new`, `/tasks/:id` | Task CRUD + comments |
-| Board | `/boards` | Task status updates |
-| Teams | `/teams` | Team CRUD + members |
+### Technology Stack
 
-### Data ownership
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 19, TypeScript, Vite, React Router 7 |
+| **UI Components** | Tailwind CSS, Radix UI, shadcn/ui, Lucide Icons |
+| **State Management** | Zustand (auth, notifications), React Hook Form |
+| **Backend** | Node.js 20+, Express 4, TypeScript |
+| **Database** | PostgreSQL 16+, Prisma ORM (migrations + type safety) |
+| **Real-time** | Socket.IO 4 (WebSocket with fallback) |
+| **Authentication** | JWT (access + refresh tokens), bcryptjs |
+| **Validation** | Zod (frontend), express-validator (backend) |
+| **Testing** | Jest + Supertest (API integration), Playwright (E2E) |
+| **CI/CD** | GitHub Actions (build, test, deploy), Render Blueprint |
+| **Development** | Docker Compose, ESLint, Prettier, Nodemon |
 
-- Task creator can modify/delete; assignees and team members can view.
-- Team actions respect OWNER / ADMIN / MEMBER roles.
-- Comments: any task-accessible user can post; only the author can edit/delete.
+## Testing & Continuous Integration
 
-### Dev → prod flow
+### Test Coverage
 
+The project includes comprehensive testing at multiple levels:
+
+#### API & Database Integration Tests
+- **Framework**: Jest + Supertest
+- **Coverage**: Auth endpoints, CRUD operations, business logic validation
+- **Database**: PostgreSQL test database with migrations
+- **Location**: `task-api/src/__tests__/`
+- **Run**: `cd task-api && npm run test:integration`
+
+#### End-to-End Tests
+- **Framework**: Playwright with Chromium
+- **Scenarios**: Complete user journeys (register → create task → Kanban → teams)
+- **Environment**: Full stack (API + UI + Database)
+- **Location**: `task-web-ui/e2e/`
+- **Run**: `cd task-web-ui && npm run test:e2e`
+
+### CI Pipeline (GitHub Actions)
+
+The CI workflow runs automatically on pull requests and pushes to `main`:
+
+1. **Build + API Tests** (`api` job)
+   - PostgreSQL 16 service container
+   - Install dependencies, generate Prisma client
+   - Run database migrations
+   - Build TypeScript (API)
+   - Execute integration test suite
+
+2. **Build UI** (`web` job)
+   - Install dependencies
+   - Build production bundle with Vite
+
+3. **E2E Tests** (`e2e` job)
+   - Full stack setup (API + UI + Database)
+   - Install Playwright browsers
+   - Start API and preview server
+   - Run E2E test suite with real browser
+
+**Configuration**: `.github/workflows/ci.yml`
+
+All tests must pass before merging to `main`.
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** 20+ and npm 9+
+- **Docker** and Docker Compose (for local PostgreSQL)
+- **Git**
+
+### 1. Clone and Install
+
+```bash
+git clone <repository-url>
+cd task-management
+
+# Install API dependencies
+cd task-api
+npm ci
+
+# Install UI dependencies
+cd ../task-web-ui
+npm ci
 ```
-feature/* branch
-    → PR + GitHub Actions CI (build / tests)
-    → merge to main (or staging)
-    → Render redeploy (API + static UI + Postgres)
-```
 
-Locally: run API + UI with `npm run dev`, smoke-test the journey above, then push. Production UI must be rebuilt when `VITE_API_BASE_URL` / `VITE_WS_URL` change.
+### 2. Database Setup (Docker)
 
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| API | Node.js, Express, TypeScript, Prisma, PostgreSQL, JWT |
-| UI | React 19, Vite, TypeScript, Tailwind, Zustand, React Router |
-| Tests | Jest + Supertest (API), Playwright (e2e) |
-| CI / Deploy | GitHub Actions, Render (`render.yaml`) |
-
-## Repo layout
-
-```
-task-management/
-├── task-api/          # Express + Prisma API
-│   ├── src/
-│   │   ├── routes/        # HTTP endpoints
-│   │   ├── controllers/   # Request handlers
-│   │   ├── services/      # Business logic
-│   │   ├── repositories/  # Prisma data access
-│   │   ├── realtime/      # Socket.IO hub
-│   │   └── middleware/    # Auth, validation, errors
-│   └── prisma/            # Schema + migrations
-├── task-web-ui/       # Vite React SPA
-│   └── src/
-│       ├── features/      # auth, dashboard, tasks, teams, boards
-│       ├── services/      # API clients + realtime
-│       └── components/    # Shared UI, ProtectedRoute, notifications
-├── .github/           # CI
-├── render.yaml        # Render Blueprint
-├── DEPLOY.md          # Production deploy notes
-└── TESTING.md         # Integration & e2e how-to
-```
-## Prerequisites
-
-- Node.js 18+
-- npm 9+
-- PostgreSQL 14+ (or Docker for local Postgres)
-
-## Local setup
-
-### 1. Database
+The easiest way to run PostgreSQL locally:
 
 ```bash
 cd task-api
 docker compose -f docker-compose.dev.yml up -d postgres
 ```
 
-### 2. API
+This starts a PostgreSQL 16 container on port 5432 with default credentials.
 
+**Verify it's running:**
+```bash
+docker ps | grep postgres
+```
+
+### 3. Configure Environment Variables
+
+#### API Configuration
 ```bash
 cd task-api
 cp .env.example .env
-# Edit DATABASE_URL / JWT secrets if needed
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npm run dev
 ```
 
-API: http://localhost:3000  
-Health: http://localhost:3000/api/v1/health
+Edit `.env` to set:
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/task_management_db?schema=public
+JWT_SECRET=your-secret-at-least-32-characters-long
+JWT_REFRESH_SECRET=your-refresh-secret-at-least-32-chars
+CORS_ORIGIN=http://localhost:5173
+```
 
-### 3. UI
-
+#### UI Configuration
 ```bash
 cd task-web-ui
 cp .env.example .env
-# VITE_API_BASE_URL=http://localhost:3000/api/v1
-npm ci
-npm run dev
 ```
 
-UI: http://localhost:5173
+Edit `.env` to set:
+```env
+VITE_API_BASE_URL=http://localhost:3000/api/v1
+VITE_WS_URL=http://localhost:3000
+```
 
-Smoke path: register → Create Task → My Tasks → Board (drag status) → Teams → comment on a task.
-
-## API overview
-
-Base path: `/api/v1`
-
-| Area | Endpoints |
-|------|-----------|
-| Health | `GET /health` |
-| Auth | register, login, refresh, profile, logout, change/forgot/reset password |
-| Tasks | CRUD + filters; `GET /tasks/:id/comments` |
-| Teams | CRUD + members |
-| Comments | `POST/PUT/DELETE /comments` |
-| Realtime | Socket.IO `/socket.io` |
-
-See `task-api/docs/API_DOCUMENTATION.md` for details.
-
-## Tests
+### 4. Database Migration
 
 ```bash
-# API + DB integration
-cd task-api && npm run test:integration
-
-# UI e2e (API + browser)
-cd task-web-ui && npm run test:e2e
+cd task-api
+npx prisma generate
+npx prisma migrate deploy
 ```
 
-Full prerequisites and env vars: [TESTING.md](./TESTING.md).
+### 5. Start Development Servers
 
-## Deploy (Render)
+**Terminal 1 - API:**
+```bash
+cd task-api
+npm run dev
+```
+API runs at `http://localhost:3000`. Health check: `http://localhost:3000/api/v1/health`
 
-1. Merge to `main` via PR.
-2. Deploy with Render Blueprint (`render.yaml`) or manual services.
-3. Set `CORS_ORIGIN` (API) to the UI URL and `VITE_API_BASE_URL` (UI) to `https://<api>/api/v1`, then redeploy the UI.
+**Terminal 2 - UI:**
+```bash
+cd task-web-ui
+npm run dev
+```
+UI runs at `http://localhost:5173`
 
-Use **Node** runtime for the API (not Alpine Docker). Details and troubleshooting: [DEPLOY.md](./DEPLOY.md).
+### 6. Create Your First Account
+
+1. Open `http://localhost:5173` in your browser
+2. Click **Register** and create an account
+3. Explore: Dashboard → Create Task → My Tasks → Kanban Board → Teams
+
+### Production Deployment (Docker Compose)
+
+For self-hosted production deployment:
+
+```bash
+cd task-api
+docker compose up -d
+```
+
+This starts:
+- PostgreSQL database (port 5432)
+- API server (port 3000)
+- pgAdmin web UI (port 5050, optional)
+
+The API automatically runs migrations on startup. Build the UI separately and deploy as static assets.
+
+**Note**: For cloud deployment (Vercel, Render), see [DEPLOY.md](./DEPLOY.md).
+
+## Project Structure
+
+```
+task-management/
+├── task-api/                  # Backend API
+│   ├── src/
+│   │   ├── routes/           # Express route definitions
+│   │   ├── controllers/      # Request handlers
+│   │   ├── services/         # Business logic + Socket.IO events
+│   │   ├── repositories/     # Prisma data access layer
+│   │   ├── middleware/       # Auth, validation, error handling
+│   │   ├── realtime/         # Socket.IO setup and handlers
+│   │   └── __tests__/        # Integration tests
+│   ├── prisma/
+│   │   ├── schema.prisma     # Database schema
+│   │   └── migrations/       # SQL migration files
+│   ├── docker-compose.yml    # Production containers
+│   └── docker-compose.dev.yml # Dev database only
+│
+├── task-web-ui/               # Frontend SPA
+│   ├── src/
+│   │   ├── features/         # Feature modules (auth, tasks, teams, boards)
+│   │   ├── components/       # Shared UI components
+│   │   ├── services/         # API client (Axios) + Socket.IO
+│   │   ├── hooks/            # Custom React hooks
+│   │   └── stores/           # Zustand state management
+│   ├── e2e/                  # Playwright tests
+│   └── public/               # Static assets
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # GitHub Actions pipeline
+├── render.yaml               # Render deployment blueprint
+├── DEPLOY.md                 # Deployment guide
+└── TESTING.md                # Testing documentation
+```
+
+## API Documentation
+
+**Base URL**: `/api/v1`
+
+### Endpoints
+
+| Category | Endpoints |
+|----------|-----------|
+| **Health** | `GET /health` |
+| **Auth** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
+| | `GET /auth/profile`, `PUT /auth/change-password` |
+| | `POST /auth/forgot-password`, `POST /auth/reset-password` |
+| **Tasks** | `GET /tasks`, `POST /tasks`, `GET /tasks/:id`, `PUT /tasks/:id`, `DELETE /tasks/:id` |
+| | `GET /tasks/:id/comments` (filters: status, priority, team, assignee, search) |
+| **Teams** | `GET /teams`, `POST /teams`, `GET /teams/:id`, `PUT /teams/:id`, `DELETE /teams/:id` |
+| | `POST /teams/:id/members`, `DELETE /teams/:id/members/:userId` |
+| **Comments** | `POST /comments`, `PUT /comments/:id`, `DELETE /comments/:id` |
+| **Real-time** | `Socket.IO /socket.io` (events: `task:created`, `task:updated`, `comment:added`, etc.) |
+
+**Full documentation**: `task-api/docs/API_DOCUMENTATION.md`
+
+## Roadmap & Known Limitations
+
+This project demonstrates production-grade architecture and deployment practices. The following features are deferred for scope management:
+
+### Planned Enhancements
+- **Email Verification**: Currently optional; account activation via email token not enforced
+- **Token Revocation**: Logout invalidates client tokens but doesn't blacklist on server
+- **Profile Editing**: Users can change password but not name/email after registration
+- **Dark Mode**: UI components support theming; toggle implementation pending
+- **File Attachments**: Schema and UI placeholders exist; upload service not integrated
+- **Activity Log**: Database tracks events; feed UI not implemented
+- **Advanced RBAC**: Basic team roles work; granular permissions (e.g., task-level) not implemented
+- **Invite by Email**: Current team invites require knowing the user ID (found in Settings)
+
+### Technical Debt
+- **Mobile UX Polish**: Responsive layout works; some touch targets and gestures need refinement
+- **Pagination**: API supports limits; infinite scroll/pagination UI not added
+- **Caching**: No Redis or CDN caching layer yet
+- **Monitoring**: Basic logging exists; APM and error tracking not integrated
+
+These limitations are documented to demonstrate awareness of scalable system design and prioritization in real-world projects.
+
+## Alternative Deployments
+
+### Render (Free Tier)
+
+The project is also deployed on Render with auto-sleep on free tier:
+
+- **UI**: [https://task-management-ui-qapw.onrender.com/](https://task-management-ui-qapw.onrender.com/)
+- **API**: [https://task-management-zmy7.onrender.com/](https://task-management-zmy7.onrender.com/)
+
+> **Note**: Render free services sleep after 15 minutes of inactivity. The first request after idle takes 30-60 seconds to wake up.
+
+Deploy your own instance: Connect this repository to Render and use the included `render.yaml` blueprint. See [DEPLOY.md](./DEPLOY.md) for full instructions.
+
+## License
+
+ISC
+
+---
+
+**Built by Muhammad** • [GitHub](https://github.com/) • Full-Stack & AI Engineering
