@@ -331,18 +331,9 @@ This project demonstrates production-grade architecture and deployment practices
 
 These limitations are documented to demonstrate awareness of scalable system design and prioritization in real-world projects.
 
-## Alternative Deployments
+## Deploy on Render
 
-### Render (Free Tier)
-
-The project is also deployed on Render with auto-sleep on free tier:
-
-- **UI**: [https://task-management-ui-qapw.onrender.com/](https://task-management-ui-qapw.onrender.com/)
-- **API**: [https://task-management-zmy7.onrender.com/](https://task-management-zmy7.onrender.com/)
-
-> **Note**: Render free services sleep after 15 minutes of inactivity. The first request after idle takes 30-60 seconds to wake up.
-
-Deploy your own instance: Connect this repository to Render and use the included `render.yaml` blueprint. See [DEPLOY.md](./DEPLOY.md) for full instructions.
+Use the included [`render.yaml`](./render.yaml) Blueprint to deploy the API, static UI, and Postgres. Full steps and troubleshooting: [DEPLOY.md](./DEPLOY.md).
 
 ## License
 
