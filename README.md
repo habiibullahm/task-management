@@ -1,12 +1,8 @@
 # Task Management System
 
-A full-stack collaborative task management platform with personal and team workspaces, drag-and-drop Kanban boards, real-time notifications, and comprehensive authentication.
+A full-stack collaborative task management platform with personal and team workspaces, drag-and-drop Kanban boards, real-time notifications, and authentication.
 
 **Live Demo:** [https://task-management-indol-zeta.vercel.app/](https://task-management-indol-zeta.vercel.app/)
-
-> **Try it:** Register a new account to explore the full feature set. The demo uses a separate production database.
-
-<!-- TODO: Add screenshots showing dashboard, Kanban board, and task detail views -->
 
 ## Features
 
@@ -19,7 +15,7 @@ A full-stack collaborative task management platform with personal and team works
 
 ### Authentication & Security
 - **Complete Auth Flow**: Registration, login, JWT access/refresh tokens, password change
-- **Password Reset**: Secure forgot-password flow with email verification
+- **Password Reset**: Secure token-based password reset
 - **Authorization**: Role-based access control (Owner, Admin, Member) for team operations
 - **Session Management**: Automatic token refresh and logout functionality
 
@@ -89,13 +85,13 @@ HTTP Request → Route Handler → Auth Middleware → Validation
 | **Validation** | Zod (frontend), express-validator (backend) |
 | **Testing** | Jest + Supertest (API integration), Playwright (E2E) |
 | **CI/CD** | GitHub Actions (build, test, deploy), Render Blueprint |
-| **Development** | Docker Compose, ESLint, Prettier, Nodemon |
+| **Development** | Docker Compose, ESLint, Nodemon |
 
 ## Testing & Continuous Integration
 
 ### Test Coverage
 
-The project includes comprehensive testing at multiple levels:
+The project includes testing at multiple levels:
 
 #### API & Database Integration Tests
 - **Framework**: Jest + Supertest
