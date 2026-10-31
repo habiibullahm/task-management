@@ -9,6 +9,7 @@ interface TaskState {
   isLoading: boolean;
   error: string | null;
   filters: TaskFilters;
+  abortController: AbortController | null;
   
   // Actions
   fetchTasks: (filters?: TaskFilters) => Promise<void>;
@@ -28,14 +29,29 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   isLoading: false,
   error: null,
   filters: {},
+  abortController: null,
 
   fetchTasks: async (filters?: TaskFilters) => {
-    set({ isLoading: true, error: null });
+    const currentController = get().abortController;
+    if (currentController) {
+      currentController.abort();
+    }
+
+    const controller = new AbortController();
+    set({ isLoading: true, error: null, abortController: controller });
+    
     try {
-      const { tasks } = await taskService.getTasks(filters || get().filters);
-      set({ tasks, isLoading: false });
-    } catch (error) {
-      set({ error: handleApiError(error, 'Failed to fetch tasks'), isLoading: false });
+      const { tasks } = await taskService.getTasks(filters || get().filters, controller.signal);
+      if (!controller.signal.aborted) {
+        set({ tasks, isLoading: false, abortController: null });
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.name === 'CanceledError' || error.message?.includes('cancel')) {
+        return;
+      }
+      if (!controller.signal.aborted) {
+        set({ error: handleApiError(error, 'Failed to fetch tasks'), isLoading: false, abortController: null });
+      }
     }
   },
 
