@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { create } from 'zustand';
 import { taskService, type CreateTaskData, type UpdateTaskData, type TaskFilters } from '@/services/task.service';
 import { handleApiError } from '@/services/api';
@@ -45,10 +46,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (!controller.signal.aborted) {
         set({ tasks, isLoading: false, abortController: null });
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.name === 'CanceledError' || error.message?.includes('cancel')) {
-        return;
-      }
+    } catch (error: unknown) {
+      if (axios.isCancel(error)) return;
       if (!controller.signal.aborted) {
         set({ error: handleApiError(error, 'Failed to fetch tasks'), isLoading: false, abortController: null });
       }

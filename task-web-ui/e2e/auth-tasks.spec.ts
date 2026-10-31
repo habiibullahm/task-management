@@ -190,7 +190,7 @@ test.describe('Tasks', () => {
     await page.getByRole('button', { name: 'All statuses', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Beta filter' })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Alpha filter' })).toHaveCount(1);
-    
+
     await page.getByPlaceholder('Search tasks...').fill('Alpha');
     await expect(page).toHaveURL(/search=Alpha/, { timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Alpha filter' })).toHaveCount(1);
