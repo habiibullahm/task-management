@@ -34,7 +34,7 @@ export interface TaskFilters {
 
 export const taskService = {
   // Get all tasks with optional filters
-  async getTasks(filters?: TaskFilters): Promise<{ tasks: Task[]; meta?: any }> {
+  async getTasks(filters?: TaskFilters, signal?: AbortSignal): Promise<{ tasks: Task[]; meta?: any }> {
     const params = new URLSearchParams();
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
@@ -44,7 +44,7 @@ export const taskService = {
       });
     }
     
-    const response = await apiClient.get<ApiResponse<Task[]>>(`/tasks?${params.toString()}`);
+    const response = await apiClient.get<ApiResponse<Task[]>>(`/tasks?${params.toString()}`, { signal });
     if (response.data.success && response.data.data) {
       return {
         tasks: response.data.data,
